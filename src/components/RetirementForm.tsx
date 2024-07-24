@@ -1,5 +1,5 @@
 // components/RetirementForm.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { TextField, Button, Paper } from '@mui/material';
 import styled from 'styled-components';
 
@@ -41,6 +41,8 @@ const RetirementForm: React.FC = () => {
   const [expectedReturns, setExpectedReturns] = useState('12');
   const [showResults, setShowResults] = useState(false);
 
+  const resultRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     calculateRetirementSavings();
   }, [
@@ -51,6 +53,12 @@ const RetirementForm: React.FC = () => {
     expectedReturns,
     lumpSumAmount,
   ]);
+
+  useEffect(() => {
+    if (showResults && resultRef.current) {
+      resultRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [showResults]);
 
   const calculateRetirementSavings = () => {
     const yearsUntilRetirement = parseInt(retirementAge) - parseInt(currentAge);
@@ -202,8 +210,11 @@ const RetirementForm: React.FC = () => {
   }
 
   const onCalculate = () => {
-    calculateRetirementSavings();
     setShowResults(true);
+    calculateRetirementSavings();
+    if (showResults && resultRef.current) {
+      resultRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   return (
@@ -224,7 +235,7 @@ const RetirementForm: React.FC = () => {
           onChange={e => setRetirementAge(e.target.value)}
         />
         <TextField
-          label='Mothy Pension Required'
+          label='Monthly Pension Required'
           variant='outlined'
           value={monthlyPensionRequired}
           type='number'
@@ -258,7 +269,9 @@ const RetirementForm: React.FC = () => {
         </Button>
       </StyledFormContainer>
       {showResults && (
-        <StyledMessageContainer>{getCalculations()}</StyledMessageContainer>
+        <StyledMessageContainer ref={resultRef}>
+          {getCalculations()}
+        </StyledMessageContainer>
       )}
     </>
   );

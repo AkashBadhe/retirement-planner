@@ -208,9 +208,6 @@ const RetirementForm: React.FC = () => {
 
   return (
     <>
-      {showResults && (
-        <StyledMessageContainer>{getCalculations()}</StyledMessageContainer>
-      )}
       <StyledFormContainer>
         <TextField
           label='Current Age'
@@ -249,7 +246,7 @@ const RetirementForm: React.FC = () => {
           onChange={e => setExpectedReturns(e.target.value)}
         />
         <TextField
-          label='Lump Sum Amount'
+          label='Existing investments (Lump Sum Amount)'
           variant='outlined'
           value={lumpSumAmount}
           type='number'
@@ -260,6 +257,9 @@ const RetirementForm: React.FC = () => {
           Calculate
         </Button>
       </StyledFormContainer>
+      {showResults && (
+        <StyledMessageContainer>{getCalculations()}</StyledMessageContainer>
+      )}
     </>
   );
 };

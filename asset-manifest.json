@@ -1,7 +1,7 @@
 {
   "files": {
     "main.css": "/retirement-planner/static/css/main.2db651cc.css",
-    "main.js": "/retirement-planner/static/js/main.dd9df8a9.js",
+    "main.js": "/retirement-planner/static/js/main.7d2fd51f.js",
     "static/js/163.899f9a20.chunk.js": "/retirement-planner/static/js/163.899f9a20.chunk.js",
     "static/media/roboto-latin-500-normal.woff2": "/retirement-planner/static/media/roboto-latin-500-normal.f25d774ecfe0996f8eb5.woff2",
     "static/media/roboto-latin-700-normal.woff2": "/retirement-planner/static/media/roboto-latin-700-normal.227c93190fe7f82de3f8.woff2",
@@ -61,11 +61,11 @@
     "static/media/roboto-greek-ext-700-normal.woff": "/retirement-planner/static/media/roboto-greek-ext-700-normal.249853776d22a271b2b5.woff",
     "index.html": "/retirement-planner/index.html",
     "main.2db651cc.css.map": "/retirement-planner/static/css/main.2db651cc.css.map",
-    "main.dd9df8a9.js.map": "/retirement-planner/static/js/main.dd9df8a9.js.map",
+    "main.7d2fd51f.js.map": "/retirement-planner/static/js/main.7d2fd51f.js.map",
     "163.899f9a20.chunk.js.map": "/retirement-planner/static/js/163.899f9a20.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.2db651cc.css",
-    "static/js/main.dd9df8a9.js"
+    "static/js/main.7d2fd51f.js"
   ]
 }

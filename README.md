@@ -1,46 +1,71 @@
-# Getting Started with Create React App
+# Retirement Planning Tool
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This project is a retirement planning tool built using React.js. It aims to help individuals plan and visualize their retirement savings and investment strategies.
 
-## Available Scripts
+## Features
 
-In the project directory, you can run:
+- Interactive user interface for inputting financial data such as current savings, expected retirement age, and desired retirement income.
+- Calculation of retirement savings goal based on user inputs and various financial factors.
+- Visualization of retirement savings progress through charts and graphs.
+- Ability to adjust variables such as investment returns and inflation rates to see the impact on retirement savings.
+- Personalized recommendations and tips for optimizing retirement savings based on individual circumstances.
 
-### `npm start`
+## Technologies Used
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+- React.js for building the user interface and managing state.
+- Chart.js for visualizing retirement savings data.
+- HTML and CSS for styling and layout.
+- JavaScript for implementing calculations and logic.
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+## Getting Started
 
-### `npm test`
+To get started with the retirement planning tool, follow these steps:
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+1. Clone the repository: `git remote add origin https://github.com/AkashBadhe/retirement-planner.git`
+2. Install dependencies: `pnpm install`
+3. Start the development server: `pnpm start`
+4. Open your browser and navigate to `http://localhost:3000`
 
-### `npm run build`
+## Contributing
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+Contributions are welcome! If you have any ideas, suggestions, or bug reports, please open an issue or submit a pull request.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## License
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more information.
 
-### `npm run eject`
+## Calculations
 
-**Note: this is a one-way operation. Once you `eject`, you can’t go back!**
+# Retirement Savings Calculation
 
-If you aren’t satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+This document outlines the step-by-step process for calculating the required savings for retirement, considering both Systematic Investment Plan (SIP) contributions and a lump sum investment.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you’re on your own.
+## Steps for Calculation
 
-You don’t have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn’t feel obligated to use this feature. However we understand that this tool wouldn’t be useful if you couldn’t customize it when you are ready for it.
+### 1. Calculate the Future Value of the SIP investments (FVSIP)
 
-## Learn More
+- **Formula:** `FVSIP = P * [((1 + r)^n - 1) / r] * (1 + r)`
+- **Where:**
+  - `P` is the SIP amount (what we want to find),
+  - `r` is the monthly return rate (expected returns % / 12 / 100),
+  - `n` is the total number of SIP payments (SIP period in years * 12).
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+### 2. Calculate the Future Value of the Lump Sum investment (FVLumpSum)
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+- **Formula:** `FVLumpSum = P * (1 + r)^n`
+- **Where:**
+  - `P` is the lump sum amount already invested,
+  - `r` is the monthly return rate,
+  - `n` is the total number of months till retirement.
+
+### 3. Calculate the Total Future Value needed (FVTotal)
+
+- **Formula:** `FVTotal = Monthly Pension Requirement * [((1 + r)^n - 1) / r] / (1 + r)`
+- **Where:**
+  - Monthly Pension Requirement is the monthly pension required,
+  - `r` is the monthly return rate during the withdrawal period,
+  - `n` is the total number of months of pension tenure (withdrawal period in years * 12).
+
+### 4. Solve for the SIP amount (P) required to meet the FVTotal, considering FVLumpSum
+
+This step involves solving the equation for `P` (the SIP amount) using the formulas provided above, to ensure the total future value needed for retirement is met, taking into account the future value of the lump sum investment.

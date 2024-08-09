@@ -56,7 +56,7 @@ const RetirementForm: React.FC = () => {
 
   useEffect(() => {
     if (showResults && resultRef.current) {
-      resultRef.current.scrollIntoView({ behavior: 'smooth' });
+      resultRef.current?.scrollIntoView?.({ behavior: 'smooth' });
     }
   }, [showResults]);
 
@@ -213,7 +213,7 @@ const RetirementForm: React.FC = () => {
     setShowResults(true);
     calculateRetirementSavings();
     if (showResults && resultRef.current) {
-      resultRef.current.scrollIntoView({ behavior: 'smooth' });
+      resultRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
@@ -269,7 +269,10 @@ const RetirementForm: React.FC = () => {
         </Button>
       </StyledFormContainer>
       {showResults && (
-        <StyledMessageContainer ref={resultRef}>
+        <StyledMessageContainer
+          ref={resultRef}
+          data-testid='calculation-result'
+        >
           {getCalculations()}
         </StyledMessageContainer>
       )}

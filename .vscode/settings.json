@@ -1,5 +1,6 @@
 {
     "files.autoSave": "afterDelay",
     "files.autoSaveDelay": 1000, // Auto-save delay in milliseconds
-    "editor.formatOnSave": true
-  }
+    "editor.formatOnSave": true,
+    "jest.jestCommandLine": "npm test --",
+}

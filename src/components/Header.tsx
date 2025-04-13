@@ -1,21 +1,25 @@
-// Header.tsx
-import React from 'react';
-import styled from 'styled-components';
+import { Link } from 'react-router-dom';
+import { AppBar, Toolbar, Typography, Button } from '@mui/material';
 
-const StyledHeader = styled.div`
-  font-size: 24px;
-  background: rgb(63, 201, 251);
-  background: radial-gradient(
-    circle,
-    rgba(63, 201, 251, 1) 0%,
-    rgba(70, 204, 252, 1) 100%
+function Header() {
+  return (
+    <AppBar position='static'>
+      <Toolbar>
+        <Typography variant='h6' style={{ flexGrow: 1 }}>
+          Retirement Planner
+        </Typography>
+        <Button color='inherit' component={Link} to='/'>
+          Retirement Form
+        </Button>
+        <Button color='inherit' component={Link} to='/home-planner'>
+          Home Planner
+        </Button>
+        <Button color='inherit' component={Link} to='/rent-calculator'>
+          Rent Calculator
+        </Button>
+      </Toolbar>
+    </AppBar>
   );
-  padding: 1rem;
-  color: white;
-`;
-
-const Header = () => (
-  <StyledHeader>Retirement Planning Calculator</StyledHeader>
-);
+}
 
 export default Header;

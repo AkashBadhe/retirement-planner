@@ -1,3 +1,4 @@
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import RetirementForm from './components/RetirementForm';
 import '@fontsource/roboto/300.css';
 import '@fontsource/roboto/400.css';
@@ -7,6 +8,8 @@ import { Container, CssBaseline } from '@mui/material';
 import styled from 'styled-components';
 import Footer from './components/Footer';
 import Header from './components/Header';
+import HomePlanner from './components/home-planner/HomePlanner';
+import RentCalculator from './components/rent-calculator/RentCalculator';
 
 // Adjust the Container to include bottom padding
 const StyledContainer = styled(Container)`
@@ -15,14 +18,18 @@ const StyledContainer = styled(Container)`
 
 function App() {
   return (
-    <>
+    <Router>
       <Header />
       <StyledContainer>
         <CssBaseline />
-        <RetirementForm />
+        <Routes>
+          <Route path='/' element={<RetirementForm />} />
+          <Route path='/home-planner' element={<HomePlanner />} />
+          <Route path='/rent-calculator' element={<RentCalculator />} />
+        </Routes>
       </StyledContainer>
       <Footer />
-    </>
+    </Router>
   );
 }
 

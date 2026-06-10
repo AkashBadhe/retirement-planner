@@ -1,0 +1,19 @@
+{
+    "name": "yahoo-finance-proxy",
+    "version": "1.0.0",
+    "description": "Azure Function proxy for Yahoo Finance API",
+    "scripts": {
+        "start": "func start",
+        "build": "tsc",
+        "watch": "tsc -w"
+    },
+    "dependencies": {
+        "node-fetch": "^2.7.0"
+    },
+    "devDependencies": {
+        "@azure/functions": "^4.5.0",
+        "@types/node": "^18.0.0",
+        "@types/node-fetch": "^2.6.11",
+        "typescript": "^5.0.0"
+    }
+}

@@ -205,16 +205,6 @@ const SipReturnsCalculatorForm: React.FC = () => {
     return num < 0 ? `-₹${result}` : `₹${result}`;
   }
 
-  function formatCompact(num: number): string {
-    const absNum = Math.abs(num);
-    if (absNum >= 1e7) {
-      return `${(num / 1e7).toFixed(2)} Cr`;
-    } else if (absNum >= 1e5) {
-      return `${(num / 1e5).toFixed(2)} Lac`;
-    }
-    return Math.round(num).toLocaleString('en-IN');
-  }
-
   function formatWithCompact(num: number): string {
     const absNum = Math.abs(num);
     if (absNum >= 1e7) {

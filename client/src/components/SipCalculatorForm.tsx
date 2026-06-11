@@ -49,14 +49,12 @@ const DonutChart: React.FC<{ invested: number; returns: number }> = ({
 }) => {
   const total = invested + returns;
   const returnsPercent = total > 0 ? (returns / total) * 100 : 0;
-  const investedPercent = total > 0 ? (invested / total) * 100 : 0;
 
   // SVG donut chart
   const radius = 80;
   const strokeWidth = 24;
   const circumference = 2 * Math.PI * radius;
   const returnsStroke = (returnsPercent / 100) * circumference;
-  const investedStroke = (investedPercent / 100) * circumference;
 
   return (
     <Box sx={{ textAlign: 'center' }}>
@@ -158,16 +156,6 @@ const SipCalculatorForm: React.FC = () => {
       result = remaining + ',' + result;
     }
     return `₹${result}`;
-  }
-
-  function formatCompact(num: number): string {
-    const absNum = Math.abs(num);
-    if (absNum >= 1e7) {
-      return `${(absNum / 1e7).toFixed(2)} Cr`;
-    } else if (absNum >= 1e5) {
-      return `${(absNum / 1e5).toFixed(2)} Lac`;
-    }
-    return Math.round(absNum).toLocaleString('en-IN');
   }
 
   function formatWithCompact(num: number): string {

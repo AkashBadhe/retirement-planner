@@ -1,0 +1,7 @@
+environment             = "dev"
+location                = "centralus"
+static_web_app_location = "eastasia"
+project                 = "fincalc"
+unique_suffix           = "akash2026"
+app_service_sku         = "F1"
+client_url              = ""

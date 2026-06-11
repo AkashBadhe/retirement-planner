@@ -16,8 +16,9 @@ import styled from 'styled-components';
 import SliderInput from './SliderInput';
 import {
   fetchHistoricalData,
-  getSymbolSuggestions,
+  searchSymbols,
   HistoricalPrice,
+  SymbolSearchResult,
 } from '../services/yahooFinance';
 
 const StyledFormContainer = styled(Paper)`
@@ -73,7 +74,7 @@ interface SipResult {
 }
 
 const SipReturnsCalculatorForm: React.FC = () => {
-  const [symbol, setSymbol] = useState('NIFTYBEES');
+  const [symbol, setSymbol] = useState('');
   const [sipAmount, setSipAmount] = useState(10000);
   const [frequency, setFrequency] = useState<Frequency>('monthly');
   const [startDate, setStartDate] = useState('2020-01-01');
@@ -83,8 +84,9 @@ const SipReturnsCalculatorForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SipResult | null>(null);
-
-  const suggestions = getSymbolSuggestions();
+  const [searchResults, setSearchResults] = useState<SymbolSearchResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchTimeout = React.useRef<NodeJS.Timeout | null>(null);
 
   const calculateSipReturns = useCallback(
     (prices: HistoricalPrice[], amount: number, freq: Frequency): Omit<SipResult, 'currency' | 'symbol'> => {
@@ -226,32 +228,64 @@ const SipReturnsCalculatorForm: React.FC = () => {
 
         <Autocomplete
           freeSolo
-          options={suggestions}
+          options={searchResults}
           getOptionLabel={option =>
-            typeof option === 'string' ? option : option.label
+            typeof option === 'string'
+              ? option
+              : `${option.symbol} — ${option.name} (${option.exchange})`
           }
+          loading={searchLoading}
           value={symbol}
           onChange={(_, val) => {
             if (typeof val === 'string') {
               setSymbol(val);
             } else if (val) {
-              setSymbol(val.value);
+              setSymbol(val.symbol);
             }
           }}
           onInputChange={(_, val, reason) => {
             if (reason === 'input') {
               setSymbol(val);
+              // Debounced search
+              if (searchTimeout.current) clearTimeout(searchTimeout.current);
+              if (val.length >= 2) {
+                setSearchLoading(true);
+                searchTimeout.current = setTimeout(async () => {
+                  const results = await searchSymbols(val);
+                  setSearchResults(results);
+                  setSearchLoading(false);
+                }, 300);
+              } else {
+                setSearchResults([]);
+                setSearchLoading(false);
+              }
             }
           }}
+          filterOptions={x => x}
           renderInput={params => (
             <TextField
               {...params}
-              label='Stock / ETF Symbol'
+              label='Search Stock / ETF'
               variant='outlined'
               size='small'
-              helperText='e.g. NIFTYBEES, INFY, AAPL, VOO'
+              placeholder='Type company name or symbol...'
+              helperText='e.g. Infosys, TCS, Apple, Nifty'
               sx={{ mb: 2 }}
             />
+          )}
+          renderOption={(props, option) => (
+            <li {...props} key={typeof option === 'string' ? option : option.symbol}>
+              <Box>
+                <Typography variant='body2' fontWeight={600}>
+                  {typeof option === 'string' ? option : option.symbol}
+                </Typography>
+                {typeof option !== 'string' && (
+                  <Typography variant='caption' color='textSecondary'>
+                    {option.name} · {option.exchange} · {option.type}
+                  </Typography>
+                )}
+              </Box>
+            </li>
           )}
         />
 

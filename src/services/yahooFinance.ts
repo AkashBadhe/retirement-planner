@@ -1,8 +1,7 @@
 // Yahoo Finance historical data service
-// Uses the Yahoo Finance chart API via CORS proxy
+// Uses own backend API to proxy Yahoo Finance requests
 
-const CORS_PROXY = 'https://corsproxy.io/?';
-const YAHOO_CHART_URL = 'https://query1.finance.yahoo.com/v8/finance/chart/';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
 
 export interface HistoricalPrice {
   date: Date;
@@ -30,17 +29,17 @@ export async function fetchHistoricalData(
   const period1 = Math.floor(startDate.getTime() / 1000);
   const period2 = Math.floor(endDate.getTime() / 1000);
 
-  // For NSE stocks, append .NS if not already
   const formattedSymbol = formatSymbol(symbol);
 
-  const url = `${CORS_PROXY}${encodeURIComponent(
-    `${YAHOO_CHART_URL}${formattedSymbol}?period1=${period1}&period2=${period2}&interval=1d&events=history`,
-  )}`;
+  const url = `${API_BASE_URL}/finance/chart?symbol=${encodeURIComponent(formattedSymbol)}&period1=${period1}&period2=${period2}&interval=1d`;
 
   const response = await fetch(url);
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch data for ${symbol}. Please check the symbol and try again.`);
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      errorData.message || `Failed to fetch data for ${symbol}. Please check the symbol and try again.`,
+    );
   }
 
   const data = await response.json();
@@ -82,17 +81,14 @@ export async function fetchHistoricalData(
 function formatSymbol(symbol: string): string {
   const trimmed = symbol.trim().toUpperCase();
 
-  // If user typed "NSE:INFY" format, strip prefix and add .NS
   if (trimmed.startsWith('NSE:')) {
     return trimmed.replace('NSE:', '') + '.NS';
   }
 
-  // If user typed "BSE:INFY" format, strip prefix and add .BO
   if (trimmed.startsWith('BSE:')) {
     return trimmed.replace('BSE:', '') + '.BO';
   }
 
-  // Common Indian ETFs/stocks — if no exchange suffix, assume NSE
   const indianSymbols = [
     'NIFTYBEES', 'GOLDBEES', 'LIQUIDBEES', 'BANKBEES', 'ITBEES',
     'INFY', 'TCS', 'RELIANCE', 'HDFCBANK', 'ICICIBANK', 'SBIN',
@@ -100,33 +96,38 @@ function formatSymbol(symbol: string): string {
     'ITC', 'KOTAKBANK', 'HINDUNILVR', 'AXISBANK', 'MARUTI',
   ];
 
-  // If it already has a suffix like .NS or .BO, keep it
   if (trimmed.includes('.')) {
     return trimmed;
   }
 
-  // If it matches known Indian symbols, add .NS
   if (indianSymbols.includes(trimmed)) {
     return trimmed + '.NS';
   }
 
-  // Otherwise return as-is (assumes US stock like AAPL, NVDA)
   return trimmed;
 }
 
-export function getSymbolSuggestions(): { label: string; value: string }[] {
-  return [
-    { label: 'NIFTYBEES (Nifty 50 ETF)', value: 'NIFTYBEES' },
-    { label: 'GOLDBEES (Gold ETF)', value: 'GOLDBEES' },
-    { label: 'INFY (Infosys)', value: 'INFY' },
-    { label: 'TCS (TCS)', value: 'TCS' },
-    { label: 'RELIANCE (Reliance)', value: 'RELIANCE' },
-    { label: 'HDFCBANK (HDFC Bank)', value: 'HDFCBANK' },
-    { label: 'ICICIBANK (ICICI Bank)', value: 'ICICIBANK' },
-    { label: 'SBIN (SBI)', value: 'SBIN' },
-    { label: 'AAPL (Apple - US)', value: 'AAPL' },
-    { label: 'NVDA (Nvidia - US)', value: 'NVDA' },
-    { label: 'VOO (S&P 500 ETF - US)', value: 'VOO' },
-    { label: 'QQQ (Nasdaq ETF - US)', value: 'QQQ' },
-  ];
+export interface SymbolSearchResult {
+  symbol: string;
+  name: string;
+  exchange: string;
+  type: string;
+}
+
+export async function searchSymbols(query: string): Promise<SymbolSearchResult[]> {
+  if (!query || query.length < 1) return [];
+
+  try {
+    const url = `${API_BASE_URL}/finance/search?q=${encodeURIComponent(query)}`;
+
+    const response = await fetch(url);
+    if (!response.ok) return [];
+
+    const data = await response.json();
+
+    // Backend already returns the filtered/mapped array
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
 }

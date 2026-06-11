@@ -9,7 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { UserService } from '../user/user.service';
 import { AuthProvider, UserRole } from '../user/schemas/user.schema';
 import { RefreshToken } from '../user/schemas/refresh-token.schema';

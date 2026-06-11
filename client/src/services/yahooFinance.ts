@@ -1,7 +1,7 @@
 // Yahoo Finance historical data service
 // Uses own backend API to proxy Yahoo Finance requests
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:4000/api';
 
 export interface HistoricalPrice {
   date: Date;

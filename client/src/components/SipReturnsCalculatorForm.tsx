@@ -71,6 +71,9 @@ interface SipResult {
   sipInstallments: number;
   currency: string;
   symbol: string;
+  dataStartDate?: string;
+  dataEndDate?: string;
+  partialData?: boolean;
 }
 
 const SipReturnsCalculatorForm: React.FC = () => {
@@ -157,6 +160,13 @@ const SipReturnsCalculatorForm: React.FC = () => {
         throw new Error('No price data found for the given date range.');
       }
 
+      // Detect if data is only partially available
+      const actualStartDate = response.prices[0].date;
+      const actualEndDate = response.prices[response.prices.length - 1].date;
+      const requestedStart = new Date(startDate);
+      const partialData =
+        actualStartDate.getTime() - requestedStart.getTime() > 7 * 24 * 60 * 60 * 1000; // >7 days gap
+
       const sipResult = calculateSipReturns(
         response.prices,
         sipAmount,
@@ -167,6 +177,9 @@ const SipReturnsCalculatorForm: React.FC = () => {
         ...sipResult,
         currency: response.meta.currency,
         symbol: response.meta.symbol,
+        dataStartDate: actualStartDate.toISOString().split('T')[0],
+        dataEndDate: actualEndDate.toISOString().split('T')[0],
+        partialData,
       });
     } catch (err: any) {
       setError(err.message || 'Something went wrong. Please try again.');
@@ -325,6 +338,35 @@ const SipReturnsCalculatorForm: React.FC = () => {
           </ToggleButton>
         </ToggleButtonGroup>
 
+        <Typography variant='body2' fontWeight={500} sx={{ mb: 1 }}>
+          Time Period
+        </Typography>
+        <ToggleButtonGroup
+          value='custom'
+          exclusive
+          onChange={(_, val) => {
+            if (!val) return;
+            const today = new Date();
+            const end = today.toISOString().split('T')[0];
+            setEndDate(end);
+            if (val === 'custom') return;
+            const years = parseInt(val, 10);
+            const start = new Date(today);
+            start.setFullYear(start.getFullYear() - years);
+            setStartDate(start.toISOString().split('T')[0]);
+          }}
+          sx={{ mb: 2, flexWrap: 'wrap' }}
+          size='small'
+        >
+          <ToggleButton value='1' sx={{ px: 2 }}>1Y</ToggleButton>
+          <ToggleButton value='3' sx={{ px: 2 }}>3Y</ToggleButton>
+          <ToggleButton value='5' sx={{ px: 2 }}>5Y</ToggleButton>
+          <ToggleButton value='10' sx={{ px: 2 }}>10Y</ToggleButton>
+          <ToggleButton value='15' sx={{ px: 2 }}>15Y</ToggleButton>
+          <ToggleButton value='20' sx={{ px: 2 }}>20Y</ToggleButton>
+          <ToggleButton value='custom' sx={{ px: 2 }}>Custom</ToggleButton>
+        </ToggleButtonGroup>
+
         <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
           <TextField
             label='Start Date'
@@ -373,6 +415,14 @@ const SipReturnsCalculatorForm: React.FC = () => {
           <Typography variant='h6' gutterBottom>
             SIP Returns — {result.symbol}
           </Typography>
+
+          {result.partialData && (
+            <Alert severity='info' sx={{ mb: 2 }}>
+              Data available only from <strong>{new Date(result.dataStartDate!).toLocaleDateString()}</strong> to <strong>{new Date(result.dataEndDate!).toLocaleDateString()}</strong>.
+              Returns are calculated for this period only.
+            </Alert>
+          )}
+
           <Divider sx={{ mb: 2 }} />
 
           <ResultRow>

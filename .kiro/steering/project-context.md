@@ -27,23 +27,43 @@ A React-based retirement planning calculator that helps users determine how much
 ## Project Structure
 
 ```
-retirement-planner/
-├── public/               # Static assets, favicon, manifest
-├── src/
-│   ├── index.tsx         # Entry point, renders <App />
-│   ├── App.tsx           # Root component: Header + RetirementForm + Footer
-│   ├── App.scss          # Empty (unused)
-│   ├── index.css         # Global body/font styles
-│   ├── components/
-│   │   ├── Header.tsx        # App title banner (styled gradient)
-│   │   ├── Footer.tsx        # Fixed bottom footer with copyright
-│   │   ├── LineSeparator.tsx # "OR" divider component (currently unused in main flow)
-│   │   └── RetirementForm.tsx # Core calculator form + logic
-├── Dockerfile            # Docker build for production
-├── Planner.md            # Original planning notes
-├── package.json
-├── tsconfig.json
-└── .prettierrc
+financial-calculators/
+├── client/               # React frontend
+│   ├── public/           # Static assets, favicon, manifest
+│   ├── src/
+│   │   ├── index.tsx         # Entry point, renders <App />
+│   │   ├── App.tsx           # Root: Router + Header + Pages + Footer
+│   │   ├── theme.ts          # MUI theme (finance color palette)
+│   │   ├── components/       # Shared UI components
+│   │   │   ├── Header.tsx
+│   │   │   ├── Footer.tsx
+│   │   │   ├── SliderInput.tsx
+│   │   │   ├── CalculatorSidebar.tsx
+│   │   │   ├── RetirementForm.tsx
+│   │   │   ├── SipCalculatorForm.tsx
+│   │   │   ├── CagrCalculatorForm.tsx
+│   │   │   ├── EmiCalculatorForm.tsx
+│   │   │   └── SipReturnsCalculatorForm.tsx
+│   │   ├── pages/            # Route pages
+│   │   ├── data/             # Shared data (calculators list)
+│   │   └── services/         # API services (yahooFinance.ts)
+│   ├── package.json
+│   └── tsconfig.json
+├── api/                  # NestJS backend
+│   ├── src/
+│   │   ├── main.ts
+│   │   ├── app.module.ts
+│   │   ├── finance/      # Yahoo Finance proxy module
+│   │   ├── auth/         # Authentication (ready for future use)
+│   │   ├── user/         # User module (ready for future use)
+│   │   └── config/       # App configuration
+│   ├── package.json
+│   └── tsconfig.json
+├── terraform/            # Azure infrastructure (IaC)
+├── .github/workflows/    # CI/CD (deploy-api.yml, deploy-frontend.yml)
+├── .kiro/steering/       # AI context
+├── package.json          # Root workspace scripts
+└── README.md
 ```
 
 ---

@@ -10,9 +10,7 @@ describe('Footer Component', () => {
 
     // Check if the footer contains the current year
     const currentYear = new Date().getFullYear();
-    const notice = new RegExp(
-      `© ${currentYear} Retirement Planning Calculator.`,
-    );
+    const notice = new RegExp(`© ${currentYear} Financial Calculators.`);
     expect(screen.getByText(notice)).toBeInTheDocument();
 
     // Check if the footer contains the text "Made with ❤️ by Akash & Amruta"

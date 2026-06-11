@@ -4,11 +4,12 @@ import App from './App';
 import '@testing-library/jest-dom/extend-expect';
 /* eslint-env jest */
 
-test('renders Header, RetirementForm, and Footer components', () => {
+test('renders Header, Home page with calculator list', () => {
   render(<App />);
 
   // Check if Header is rendered
-  expect(
-    screen.getByText('Retirement Planning Calculator'),
-  ).toBeInTheDocument();
+  expect(screen.getByText('Financial Calculators')).toBeInTheDocument();
+
+  // Check if the Retirement Planner card is rendered on the home page
+  expect(screen.getByText('Retirement Planner')).toBeInTheDocument();
 });

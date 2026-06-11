@@ -1,21 +1,44 @@
 // Header.tsx
 import React from 'react';
-import styled from 'styled-components';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { AppBar, Toolbar, Typography, IconButton } from '@mui/material';
+import CalculateIcon from '@mui/icons-material/Calculate';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import calculators from '../data/calculators';
 
-const StyledHeader = styled.div`
-  font-size: 24px;
-  background: rgb(63, 201, 251);
-  background: radial-gradient(
-    circle,
-    rgba(63, 201, 251, 1) 0%,
-    rgba(70, 204, 252, 1) 100%
+const Header = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const currentCalculator = calculators.find(
+    c => c.path === location.pathname,
   );
-  padding: 1rem;
-  color: white;
-`;
+  const isHome = location.pathname === '/';
 
-const Header = () => (
-  <StyledHeader>Retirement Planning Calculator</StyledHeader>
-);
+  return (
+    <AppBar position='static' color='primary' elevation={0}>
+      <Toolbar>
+        {!isHome && (
+          <IconButton
+            onClick={() => navigate('/')}
+            sx={{ color: 'white', mr: 1 }}
+            size='small'
+          >
+            <ArrowBackIcon />
+          </IconButton>
+        )}
+        {isHome && <CalculateIcon sx={{ mr: 1, color: 'white' }} />}
+        <Typography
+          variant='h6'
+          component='div'
+          sx={{ color: 'white', cursor: 'pointer' }}
+          onClick={() => navigate('/')}
+        >
+          {currentCalculator ? currentCalculator.title : 'Financial Calculators'}
+        </Typography>
+      </Toolbar>
+    </AppBar>
+  );
+};
 
 export default Header;

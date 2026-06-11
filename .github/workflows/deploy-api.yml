@@ -1,0 +1,35 @@
+name: Deploy API to Azure App Service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'api/**'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: ./api
+        run: npm install
+
+      - name: Build
+        working-directory: ./api
+        run: npm run build
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_API_APP_NAME }}
+          publish-profile: ${{ secrets.AZURE_API_PUBLISH_PROFILE }}
+          package: ./api

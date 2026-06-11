@@ -56,13 +56,6 @@ resource "azurerm_linux_web_app" "api" {
     application_stack {
       node_version = "20-lts"
     }
-
-    cors {
-      allowed_origins = [
-        "http://localhost:3000",
-        var.client_url != "" ? var.client_url : "https://${azurerm_static_web_app.web.default_host_name}",
-      ]
-    }
   }
 
   app_settings = {

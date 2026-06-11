@@ -11,6 +11,7 @@ async function bootstrap() {
       'http://localhost:3000',
       'http://localhost:3001',
       'https://akashbadhe.github.io',
+      'https://calc.cash-flow.in',
     ],
     credentials: true,
   });

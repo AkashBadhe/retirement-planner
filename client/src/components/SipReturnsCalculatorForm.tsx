@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Paper,
   Typography,
@@ -80,7 +80,11 @@ const SipReturnsCalculatorForm: React.FC = () => {
   const [symbol, setSymbol] = useState('');
   const [sipAmount, setSipAmount] = useState(10000);
   const [frequency, setFrequency] = useState<Frequency>('monthly');
-  const [startDate, setStartDate] = useState('2020-01-01');
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 5);
+    return d.toISOString().split('T')[0];
+  });
   const [endDate, setEndDate] = useState(
     new Date().toISOString().split('T')[0],
   );
@@ -89,7 +93,18 @@ const SipReturnsCalculatorForm: React.FC = () => {
   const [result, setResult] = useState<SipResult | null>(null);
   const [searchResults, setSearchResults] = useState<SymbolSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [timePeriod, setTimePeriod] = useState('5');
+  const [inputDisplay, setInputDisplay] = useState('');
   const searchTimeout = React.useRef<NodeJS.Timeout | null>(null);
+  const hasCalculated = useRef(false);
+
+  // Auto-recalculate when inputs change after first calculation
+  useEffect(() => {
+    if (hasCalculated.current && symbol.trim()) {
+      handleCalculate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate, sipAmount, frequency]);
 
   const calculateSipReturns = useCallback(
     (prices: HistoricalPrice[], amount: number, freq: Frequency): Omit<SipResult, 'currency' | 'symbol'> => {
@@ -147,6 +162,7 @@ const SipReturnsCalculatorForm: React.FC = () => {
   const handleCalculate = async () => {
     setLoading(true);
     setError(null);
+    hasCalculated.current = true;
     setResult(null);
 
     try {
@@ -222,6 +238,16 @@ const SipReturnsCalculatorForm: React.FC = () => {
     return `$${Math.round(num).toLocaleString('en-US')}`;
   }
 
+  function formatSymbolDisplay(symbol: string): string {
+    if (symbol.endsWith('.NS')) {
+      return `${symbol.replace('.NS', '')} (NSE)`;
+    }
+    if (symbol.endsWith('.BO')) {
+      return `${symbol.replace('.BO', '')} (BSE)`;
+    }
+    return symbol;
+  }
+
   return (
     <>
       <StyledFormContainer>
@@ -235,19 +261,22 @@ const SipReturnsCalculatorForm: React.FC = () => {
           getOptionLabel={option =>
             typeof option === 'string'
               ? option
-              : `${option.symbol} — ${option.name} (${option.exchange})`
+              : `${formatSymbolDisplay(option.symbol)} — ${option.name}`
           }
           loading={searchLoading}
-          value={symbol}
+          inputValue={inputDisplay}
           onChange={(_, val) => {
             if (typeof val === 'string') {
               setSymbol(val);
+              setInputDisplay(val);
             } else if (val) {
               setSymbol(val.symbol);
+              setInputDisplay(`${formatSymbolDisplay(val.symbol)} — ${val.name}`);
             }
           }}
           onInputChange={(_, val, reason) => {
             if (reason === 'input') {
+              setInputDisplay(val);
               setSymbol(val);
               // Debounced search
               if (searchTimeout.current) clearTimeout(searchTimeout.current);
@@ -280,11 +309,11 @@ const SipReturnsCalculatorForm: React.FC = () => {
             <li {...props} key={typeof option === 'string' ? option : option.symbol}>
               <Box>
                 <Typography variant='body2' fontWeight={600}>
-                  {typeof option === 'string' ? option : option.symbol}
+                  {typeof option === 'string' ? option : formatSymbolDisplay(option.symbol)}
                 </Typography>
                 {typeof option !== 'string' && (
                   <Typography variant='caption' color='textSecondary'>
-                    {option.name} · {option.exchange} · {option.type}
+                    {option.name} · {option.type}
                   </Typography>
                 )}
               </Box>
@@ -332,21 +361,21 @@ const SipReturnsCalculatorForm: React.FC = () => {
           Time Period
         </Typography>
         <ToggleButtonGroup
-          value='custom'
+          value={timePeriod}
           exclusive
           onChange={(_, val) => {
             if (!val) return;
-            const today = new Date();
-            const end = today.toISOString().split('T')[0];
-            setEndDate(end);
+            setTimePeriod(val);
             if (val === 'custom') return;
-            const years = parseInt(val, 10);
+            const today = new Date();
+            setEndDate(today.toISOString().split('T')[0]);
             const start = new Date(today);
-            start.setFullYear(start.getFullYear() - years);
+            start.setFullYear(start.getFullYear() - parseInt(val, 10));
             setStartDate(start.toISOString().split('T')[0]);
           }}
           sx={{ mb: 2, flexWrap: 'wrap' }}
           size='small'
+          color='primary'
         >
           <ToggleButton value='1' sx={{ px: 2 }}>1Y</ToggleButton>
           <ToggleButton value='3' sx={{ px: 2 }}>3Y</ToggleButton>
@@ -357,26 +386,28 @@ const SipReturnsCalculatorForm: React.FC = () => {
           <ToggleButton value='custom' sx={{ px: 2 }}>Custom</ToggleButton>
         </ToggleButtonGroup>
 
-        <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-          <TextField
-            label='Start Date'
-            type='date'
-            value={startDate}
-            onChange={e => setStartDate(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            size='small'
-            fullWidth
-          />
-          <TextField
-            label='End Date'
-            type='date'
-            value={endDate}
-            onChange={e => setEndDate(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-            size='small'
-            fullWidth
-          />
-        </Box>
+        {timePeriod === 'custom' && (
+          <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+            <TextField
+              label='Start Date'
+              type='date'
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              size='small'
+              fullWidth
+            />
+            <TextField
+              label='End Date'
+              type='date'
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              size='small'
+              fullWidth
+            />
+          </Box>
+        )}
 
         <Button
           variant='contained'
@@ -403,7 +434,7 @@ const SipReturnsCalculatorForm: React.FC = () => {
       {result && (
         <StyledResultContainer>
           <Typography variant='h6' gutterBottom>
-            SIP Returns — {result.symbol}
+            SIP Returns — {formatSymbolDisplay(result.symbol)}
           </Typography>
 
           {result.partialData && (

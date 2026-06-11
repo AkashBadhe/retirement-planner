@@ -13,6 +13,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import HistoryIcon from '@mui/icons-material/History';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import calculators from '../data/calculators';
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -21,6 +22,7 @@ const iconMap: Record<string, React.ReactNode> = {
   show_chart: <ShowChartIcon />,
   account_balance: <AccountBalanceIcon />,
   history: <HistoryIcon />,
+  account_balance_wallet: <AccountBalanceWalletIcon />,
 };
 
 const CalculatorSidebar: React.FC = () => {

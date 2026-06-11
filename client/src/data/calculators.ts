@@ -41,6 +41,13 @@ const calculators: Calculator[] = [
     path: '/sip-returns',
     icon: 'history',
   },
+  {
+    title: 'SWP Calculator',
+    description:
+      'Calculate how long your investment lasts with systematic monthly withdrawals.',
+    path: '/swp-calculator',
+    icon: 'account_balance_wallet',
+  },
 ];
 
 export default calculators;

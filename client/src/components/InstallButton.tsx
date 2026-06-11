@@ -47,18 +47,23 @@ const InstallButton: React.FC = () => {
     <Button
       variant='outlined'
       size='small'
-      startIcon={<InstallMobileIcon />}
+      startIcon={<InstallMobileIcon sx={{ fontSize: '16px !important' }} />}
       onClick={handleInstall}
       sx={{
         color: 'white',
         borderColor: 'rgba(255,255,255,0.5)',
+        whiteSpace: 'nowrap',
+        minWidth: 'auto',
+        px: { xs: 1, sm: 2 },
+        py: 0.5,
+        fontSize: { xs: '0.7rem', sm: '0.8rem' },
         '&:hover': {
           borderColor: 'white',
           backgroundColor: 'rgba(255,255,255,0.1)',
         },
       }}
     >
-      Install App
+      Install
     </Button>
   );
 };

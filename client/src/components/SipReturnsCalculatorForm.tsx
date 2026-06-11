@@ -11,6 +11,12 @@ import {
   ToggleButtonGroup,
   CircularProgress,
   Alert,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import styled from 'styled-components';
 import SliderInput from './SliderInput';
@@ -60,6 +66,60 @@ const NegativeValue = styled(Typography)`
 `;
 
 type Frequency = 'monthly' | 'weekly' | 'daily';
+
+const periodOptions = [
+  { value: '1', label: '1 Year' },
+  { value: '3', label: '3 Years' },
+  { value: '5', label: '5 Years' },
+  { value: '10', label: '10 Years' },
+  { value: '15', label: '15 Years' },
+  { value: '20', label: '20 Years' },
+  { value: 'custom', label: 'Custom' },
+];
+
+const TimePeriodSelector: React.FC<{
+  timePeriod: string;
+  onChange: (val: string) => void;
+}> = ({ timePeriod, onChange }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+
+  if (isMobile) {
+    return (
+      <FormControl fullWidth size='small' sx={{ mb: 2 }}>
+        <InputLabel>Time Period</InputLabel>
+        <Select
+          value={timePeriod}
+          label='Time Period'
+          onChange={e => onChange(e.target.value)}
+        >
+          {periodOptions.map(opt => (
+            <MenuItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    );
+  }
+
+  return (
+    <ToggleButtonGroup
+      value={timePeriod}
+      exclusive
+      onChange={(_, val) => val && onChange(val)}
+      sx={{ mb: 2, display: 'flex', width: '100%' }}
+      size='small'
+      color='primary'
+    >
+      {periodOptions.map(opt => (
+        <ToggleButton key={opt.value} value={opt.value} sx={{ flex: 1, px: 0 }}>
+          {opt.value === 'custom' ? 'Custom' : `${opt.value}Y`}
+        </ToggleButton>
+      ))}
+    </ToggleButtonGroup>
+  );
+};
 
 interface SipResult {
   totalInvested: number;
@@ -266,15 +326,24 @@ const SipReturnsCalculatorForm: React.FC = () => {
           loading={searchLoading}
           inputValue={inputDisplay}
           onChange={(_, val) => {
-            if (typeof val === 'string') {
+            if (val === null) {
+              setSymbol('');
+              setInputDisplay('');
+            } else if (typeof val === 'string') {
               setSymbol(val);
               setInputDisplay(val);
-            } else if (val) {
+            } else {
               setSymbol(val.symbol);
               setInputDisplay(`${formatSymbolDisplay(val.symbol)} — ${val.name}`);
             }
           }}
           onInputChange={(_, val, reason) => {
+            if (reason === 'clear') {
+              setInputDisplay('');
+              setSymbol('');
+              setSearchResults([]);
+              return;
+            }
             if (reason === 'input') {
               setInputDisplay(val);
               setSymbol(val);
@@ -357,14 +426,12 @@ const SipReturnsCalculatorForm: React.FC = () => {
           </ToggleButton>
         </ToggleButtonGroup>
 
-        <Typography variant='body2' fontWeight={500} sx={{ mb: 1 }}>
+        <Typography variant='body2' fontWeight={500} sx={{ mb: 1.5, mt: 1 }}>
           Time Period
         </Typography>
-        <ToggleButtonGroup
-          value={timePeriod}
-          exclusive
-          onChange={(_, val) => {
-            if (!val) return;
+        <TimePeriodSelector
+          timePeriod={timePeriod}
+          onChange={(val) => {
             setTimePeriod(val);
             if (val === 'custom') return;
             const today = new Date();
@@ -373,18 +440,7 @@ const SipReturnsCalculatorForm: React.FC = () => {
             start.setFullYear(start.getFullYear() - parseInt(val, 10));
             setStartDate(start.toISOString().split('T')[0]);
           }}
-          sx={{ mb: 2, flexWrap: 'wrap' }}
-          size='small'
-          color='primary'
-        >
-          <ToggleButton value='1' sx={{ px: 2 }}>1Y</ToggleButton>
-          <ToggleButton value='3' sx={{ px: 2 }}>3Y</ToggleButton>
-          <ToggleButton value='5' sx={{ px: 2 }}>5Y</ToggleButton>
-          <ToggleButton value='10' sx={{ px: 2 }}>10Y</ToggleButton>
-          <ToggleButton value='15' sx={{ px: 2 }}>15Y</ToggleButton>
-          <ToggleButton value='20' sx={{ px: 2 }}>20Y</ToggleButton>
-          <ToggleButton value='custom' sx={{ px: 2 }}>Custom</ToggleButton>
-        </ToggleButtonGroup>
+        />
 
         {timePeriod === 'custom' && (
           <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>

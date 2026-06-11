@@ -1,10 +1,11 @@
 // Header.tsx
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { AppBar, Toolbar, Typography, IconButton } from '@mui/material';
+import { AppBar, Toolbar, Typography, IconButton, Box } from '@mui/material';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import calculators from '../data/calculators';
+import InstallButton from './InstallButton';
 
 const Header = () => {
   const navigate = useNavigate();
@@ -31,11 +32,14 @@ const Header = () => {
         <Typography
           variant='h6'
           component='div'
-          sx={{ color: 'white', cursor: 'pointer' }}
+          sx={{ color: 'white', cursor: 'pointer', flexGrow: 1 }}
           onClick={() => navigate('/')}
         >
           {currentCalculator ? currentCalculator.title : 'Financial Calculators'}
         </Typography>
+        <Box>
+          <InstallButton />
+        </Box>
       </Toolbar>
     </AppBar>
   );

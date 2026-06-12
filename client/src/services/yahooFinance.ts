@@ -131,3 +131,19 @@ export async function searchSymbols(query: string): Promise<SymbolSearchResult[]
     return [];
   }
 }
+
+export interface ExchangeRate {
+  from: string;
+  to: string;
+  rate: number;
+  timestamp: number;
+}
+
+export async function getExchangeRate(from: string = 'USD', to: string = 'INR'): Promise<ExchangeRate> {
+  const url = `${API_BASE_URL}/finance/exchange-rate?from=${from}&to=${to}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error('Failed to fetch exchange rate');
+  }
+  return response.json();
+}

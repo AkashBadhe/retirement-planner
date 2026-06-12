@@ -77,4 +77,36 @@ export class FinanceService {
       );
     }
   }
+
+  async getExchangeRate(from: string, to: string) {
+    try {
+      // Use the free exchangerate-api (no key needed)
+      const url = `https://open.er-api.com/v6/latest/${from.toUpperCase()}`;
+
+      const { data } = await firstValueFrom(
+        this.httpService.get(url),
+      );
+
+      const rate = data.rates?.[to.toUpperCase()];
+      if (!rate) {
+        throw new HttpException(
+          `Exchange rate not found for ${from} to ${to}`,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      return {
+        from: from.toUpperCase(),
+        to: to.toUpperCase(),
+        rate,
+        timestamp: data.time_last_update_unix,
+      };
+    } catch (error: any) {
+      if (error instanceof HttpException) throw error;
+      throw new HttpException(
+        'Failed to fetch exchange rate',
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+  }
 }

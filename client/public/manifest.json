@@ -1,7 +1,7 @@
 {
-    "name": "Financial Calculators",
-    "short_name": "FinCalc",
-    "description": "Retirement planner, SIP calculator, CAGR, EMI, and stock SIP returns with real market data.",
+    "name": "Investo",
+    "short_name": "Investo",
+    "description": "Financial calculators — Retirement planner, SIP, CAGR, EMI, SWP, and stock SIP returns with real market data.",
     "start_url": ".",
     "display": "standalone",
     "theme_color": "#1a3a5c",

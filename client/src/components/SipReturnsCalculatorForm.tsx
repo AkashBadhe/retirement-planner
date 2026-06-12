@@ -421,7 +421,6 @@ const SipReturnsCalculatorForm: React.FC = () => {
             await navigator.share({
               title: `SIP Returns — ${formatSymbolDisplay(res.symbol)}`,
               text: shareText,
-              url: 'https://calc.cash-flow.in/#/sip-returns',
               files: [file],
             });
             return;

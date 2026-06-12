@@ -46,4 +46,16 @@ export class FinanceController {
 
     return this.financeService.searchSymbols(query);
   }
+
+  /**
+   * GET /api/finance/exchange-rate?from=USD&to=INR
+   * Returns current exchange rate
+   */
+  @Get('exchange-rate')
+  async getExchangeRate(
+    @Query('from') from: string = 'USD',
+    @Query('to') to: string = 'INR',
+  ) {
+    return this.financeService.getExchangeRate(from, to);
+  }
 }

@@ -19,10 +19,13 @@ import {
   useTheme,
 } from '@mui/material';
 import styled from 'styled-components';
+import ShareIcon from '@mui/icons-material/Share';
+import html2canvas from 'html2canvas';
 import SliderInput from './SliderInput';
 import {
   fetchHistoricalData,
   searchSymbols,
+  getExchangeRate,
   HistoricalPrice,
   SymbolSearchResult,
 } from '../services/yahooFinance';
@@ -157,14 +160,21 @@ const SipReturnsCalculatorForm: React.FC = () => {
   const [inputDisplay, setInputDisplay] = useState('');
   const searchTimeout = React.useRef<NodeJS.Timeout | null>(null);
   const hasCalculated = useRef(false);
+  const resultRef = useRef<HTMLDivElement>(null);
 
-  // Auto-recalculate when inputs change after first calculation
+  // Auto-recalculate immediately when SIP amount or frequency changes
   useEffect(() => {
+    if (!hasCalculated.current || !symbol.trim()) return;
+    handleCalculate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sipAmount, frequency]);
+
+  // Recalculate on date blur (not on every keystroke)
+  const handleDateBlur = () => {
     if (hasCalculated.current && symbol.trim()) {
       handleCalculate();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endDate, sipAmount, frequency]);
+  };
 
   const calculateSipReturns = useCallback(
     (prices: HistoricalPrice[], amount: number, freq: Frequency): Omit<SipResult, 'currency' | 'symbol'> => {
@@ -219,6 +229,74 @@ const SipReturnsCalculatorForm: React.FC = () => {
     [startDate, endDate],
   );
 
+  // Forex-aware SIP calculation: converts INR SIP to foreign currency using historical rates
+  const calculateSipReturnsWithForex = (
+    prices: HistoricalPrice[],
+    inrAmount: number,
+    freq: Frequency,
+    isNonInr: boolean,
+    forexPrices: HistoricalPrice[],
+  ): Omit<SipResult, 'currency' | 'symbol'> => {
+    const sipDates = getSipDates(new Date(startDate), new Date(endDate), freq);
+
+    let totalUnits = 0;
+    let totalInvestedInr = 0;
+    let installments = 0;
+    const cashFlows: { date: Date; amount: number }[] = [];
+
+    for (const sipDate of sipDates) {
+      const price = findClosestPrice(prices, sipDate);
+      if (!price) continue;
+
+      let sipInForeignCurrency = inrAmount;
+
+      if (isNonInr) {
+        // Find the forex rate on this SIP date (e.g. 1 USD = 83 INR)
+        const forexRate = findClosestPrice(forexPrices, sipDate);
+        const rateOnDate = forexRate?.close || 83; // fallback
+        sipInForeignCurrency = inrAmount / rateOnDate; // Convert INR to USD
+      }
+
+      const units = sipInForeignCurrency / price.close;
+      totalUnits += units;
+      totalInvestedInr += inrAmount;
+      installments++;
+      cashFlows.push({ date: price.date, amount: -inrAmount });
+    }
+
+    // Current value: units × last stock price × current forex rate
+    const lastPrice = prices[prices.length - 1]?.close || 0;
+    const lastDate = prices[prices.length - 1]?.date || new Date(endDate);
+
+    let currentValueInr: number;
+    if (isNonInr) {
+      const lastForex = forexPrices.length > 0
+        ? forexPrices[forexPrices.length - 1].close
+        : 83;
+      currentValueInr = totalUnits * lastPrice * lastForex;
+    } else {
+      currentValueInr = totalUnits * lastPrice;
+    }
+
+    const absoluteReturns = currentValueInr - totalInvestedInr;
+    const absoluteReturnsPercent =
+      totalInvestedInr > 0 ? (absoluteReturns / totalInvestedInr) * 100 : 0;
+
+    // XIRR in INR terms
+    cashFlows.push({ date: lastDate, amount: currentValueInr });
+    const xirr = calculateXIRR(cashFlows) * 100;
+
+    return {
+      totalInvested: totalInvestedInr,
+      currentValue: currentValueInr,
+      totalUnits,
+      absoluteReturns,
+      absoluteReturnsPercent,
+      xirr,
+      sipInstallments: installments,
+    };
+  };
+
   const handleCalculate = async () => {
     setLoading(true);
     setError(null);
@@ -241,17 +319,36 @@ const SipReturnsCalculatorForm: React.FC = () => {
       const actualEndDate = response.prices[response.prices.length - 1].date;
       const requestedStart = new Date(startDate);
       const partialData =
-        actualStartDate.getTime() - requestedStart.getTime() > 7 * 24 * 60 * 60 * 1000; // >7 days gap
+        actualStartDate.getTime() - requestedStart.getTime() > 7 * 24 * 60 * 60 * 1000;
 
-      const sipResult = calculateSipReturns(
+      const isNonInr = response.meta.currency !== 'INR';
+
+      // Fetch historical USD/INR rates if non-INR stock
+      let forexPrices: HistoricalPrice[] = [];
+      if (isNonInr) {
+        try {
+          const forexResponse = await fetchHistoricalData(
+            `${response.meta.currency}INR=X`,
+            new Date(startDate),
+            new Date(endDate),
+          );
+          forexPrices = forexResponse.prices;
+        } catch {
+          // If forex data fails, fallback to approximate rate
+        }
+      }
+
+      const sipResult = calculateSipReturnsWithForex(
         response.prices,
         sipAmount,
         frequency,
+        isNonInr,
+        forexPrices,
       );
 
       setResult({
         ...sipResult,
-        currency: response.meta.currency,
+        currency: 'INR',
         symbol: response.meta.symbol,
         dataStartDate: actualStartDate.toISOString().split('T')[0],
         dataEndDate: actualEndDate.toISOString().split('T')[0],
@@ -291,11 +388,8 @@ const SipReturnsCalculatorForm: React.FC = () => {
     return formatIndianCurrency(num);
   }
 
-  function formatCurrency(num: number, currency: string): string {
-    if (currency === 'INR') {
-      return formatWithCompact(num);
-    }
-    return `$${Math.round(num).toLocaleString('en-US')}`;
+  function formatCurrency(num: number, _currency: string): string {
+    return formatWithCompact(num);
   }
 
   function formatSymbolDisplay(symbol: string): string {
@@ -306,6 +400,62 @@ const SipReturnsCalculatorForm: React.FC = () => {
       return `${symbol.replace('.BO', '')} (BSE)`;
     }
     return symbol;
+  }
+
+  function handleShare(res: SipResult) {
+    if (!resultRef.current) return;
+
+    html2canvas(resultRef.current, {
+      backgroundColor: '#ffffff',
+      scale: 2,
+    }).then(async canvas => {
+      canvas.toBlob(async blob => {
+        if (!blob) return;
+
+        const file = new File([blob], 'sip-returns.png', { type: 'image/png' });
+        const shareText = getShareText(res);
+
+        // Try native share API (works on mobile with image + text)
+        if (navigator.share && navigator.canShare?.({ files: [file] })) {
+          try {
+            await navigator.share({
+              title: `SIP Returns — ${formatSymbolDisplay(res.symbol)}`,
+              text: shareText,
+              url: 'https://calc.cash-flow.in/#/sip-returns',
+              files: [file],
+            });
+            return;
+          } catch {
+            // User cancelled or share failed, fallback below
+          }
+        }
+
+        // Fallback: open WhatsApp with text + link
+        const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+        window.open(whatsappUrl, '_blank');
+      }, 'image/png');
+    });
+  }
+
+  function getShareText(res: SipResult): string {
+    const symbolName = formatSymbolDisplay(res.symbol);
+    const period = res.partialData
+      ? `${new Date(res.dataStartDate!).toLocaleDateString()} to ${new Date(res.dataEndDate!).toLocaleDateString()}`
+      : `${new Date(startDate).toLocaleDateString()} to ${new Date(endDate).toLocaleDateString()}`;
+
+    return [
+      `📊 *SIP Returns — ${symbolName}*`,
+      ``,
+      `💰 SIP: ${formatWithCompact(sipAmount)} / ${frequency}`,
+      `📅 Period: ${period}`,
+      ``,
+      `📥 Invested: ${formatWithCompact(res.totalInvested)}`,
+      `📈 Value: ${formatWithCompact(res.currentValue)}`,
+      `${res.absoluteReturns >= 0 ? '✅' : '🔻'} Returns: ${formatWithCompact(res.absoluteReturns)} (${res.absoluteReturnsPercent.toFixed(2)}%)`,
+      `📊 XIRR: ${res.xirr.toFixed(2)}%`,
+      ``,
+      `Try it yourself 👉 https://calc.cash-flow.in/#/sip-returns`,
+    ].join('\n');
   }
 
   return (
@@ -415,13 +565,13 @@ const SipReturnsCalculatorForm: React.FC = () => {
           sx={{ mb: 3 }}
           size='small'
         >
-          <ToggleButton value='monthly' sx={{ px: 3 }}>
+          <ToggleButton value='monthly' sx={{ px: { xs: 2, sm: 3 } }}>
             Monthly
           </ToggleButton>
-          <ToggleButton value='weekly' sx={{ px: 3 }}>
+          <ToggleButton value='weekly' sx={{ px: { xs: 2, sm: 3 } }}>
             Weekly
           </ToggleButton>
-          <ToggleButton value='daily' sx={{ px: 3 }}>
+          <ToggleButton value='daily' sx={{ px: { xs: 2, sm: 3 } }}>
             Daily
           </ToggleButton>
         </ToggleButtonGroup>
@@ -439,6 +589,12 @@ const SipReturnsCalculatorForm: React.FC = () => {
             const start = new Date(today);
             start.setFullYear(start.getFullYear() - parseInt(val, 10));
             setStartDate(start.toISOString().split('T')[0]);
+            // Trigger recalculation after state updates
+            setTimeout(() => {
+              if (hasCalculated.current && symbol.trim()) {
+                handleCalculate();
+              }
+            }, 0);
           }}
         />
 
@@ -449,6 +605,7 @@ const SipReturnsCalculatorForm: React.FC = () => {
               type='date'
               value={startDate}
               onChange={e => setStartDate(e.target.value)}
+              onBlur={handleDateBlur}
               InputLabelProps={{ shrink: true }}
               size='small'
               fullWidth
@@ -458,6 +615,7 @@ const SipReturnsCalculatorForm: React.FC = () => {
               type='date'
               value={endDate}
               onChange={e => setEndDate(e.target.value)}
+              onBlur={handleDateBlur}
               InputLabelProps={{ shrink: true }}
               size='small'
               fullWidth
@@ -488,10 +646,20 @@ const SipReturnsCalculatorForm: React.FC = () => {
       )}
 
       {result && (
-        <StyledResultContainer>
-          <Typography variant='h6' gutterBottom>
-            SIP Returns — {formatSymbolDisplay(result.symbol)}
-          </Typography>
+        <StyledResultContainer ref={resultRef}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+            <Typography variant='h6'>
+              SIP Returns — {formatSymbolDisplay(result.symbol)}
+            </Typography>
+            <Button
+              size='small'
+              startIcon={<ShareIcon />}
+              onClick={() => handleShare(result)}
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              Share
+            </Button>
+          </Box>
 
           {result.partialData && (
             <Alert severity='info' sx={{ mb: 2 }}>
@@ -501,6 +669,26 @@ const SipReturnsCalculatorForm: React.FC = () => {
           )}
 
           <Divider sx={{ mb: 2 }} />
+
+          <ResultRow>
+            <ResultLabel variant='body1'>SIP Amount</ResultLabel>
+            <ResultValue variant='body1'>
+              {formatWithCompact(sipAmount)} / {frequency}
+            </ResultValue>
+          </ResultRow>
+
+          <Divider />
+
+          <ResultRow>
+            <ResultLabel variant='body1'>Period</ResultLabel>
+            <ResultValue variant='body1'>
+              {result.partialData
+                ? `${new Date(result.dataStartDate!).toLocaleDateString()} — ${new Date(result.dataEndDate!).toLocaleDateString()}`
+                : `${new Date(startDate).toLocaleDateString()} — ${new Date(endDate).toLocaleDateString()}`}
+            </ResultValue>
+          </ResultRow>
+
+          <Divider />
 
           <ResultRow>
             <ResultLabel variant='body1'>Total Invested</ResultLabel>
@@ -620,43 +808,93 @@ function findClosestPrice(
   return null;
 }
 
-// XIRR calculation using Newton-Raphson method
+// XIRR calculation using Newton-Raphson method with bisection fallback
 function calculateXIRR(cashFlows: { date: Date; amount: number }[]): number {
   if (cashFlows.length < 2) return 0;
 
   const daysInYear = 365.25;
   const firstDate = cashFlows[0].date;
 
-  // Convert dates to year fractions from first date
   const flows = cashFlows.map(cf => ({
     amount: cf.amount,
     years: (cf.date.getTime() - firstDate.getTime()) / (daysInYear * 24 * 60 * 60 * 1000),
   }));
 
-  // Newton-Raphson to solve for rate where NPV = 0
-  let rate = 0.1; // Initial guess: 10%
+  // NPV function
+  const npvAtRate = (r: number): number => {
+    let npv = 0;
+    for (const flow of flows) {
+      npv += flow.amount / Math.pow(1 + r, flow.years);
+    }
+    return npv;
+  };
 
+  // Determine if overall returns are positive or negative
+  const totalInvested = cashFlows
+    .filter(cf => cf.amount < 0)
+    .reduce((sum, cf) => sum + Math.abs(cf.amount), 0);
+  const finalValue = cashFlows[cashFlows.length - 1].amount;
+  const isNegativeReturn = finalValue < totalInvested;
+
+  // Better initial guess based on returns direction
+  let rate = isNegativeReturn ? -0.1 : 0.1;
+
+  // Newton-Raphson
   for (let iter = 0; iter < 100; iter++) {
     let npv = 0;
     let dnpv = 0;
 
     for (const flow of flows) {
       const factor = Math.pow(1 + rate, flow.years);
+      if (factor === 0 || !isFinite(factor)) break;
       npv += flow.amount / factor;
       dnpv -= (flow.years * flow.amount) / (factor * (1 + rate));
     }
 
     if (Math.abs(npv) < 1e-6) break;
+    if (dnpv === 0 || !isFinite(dnpv)) break;
 
     const newRate = rate - npv / dnpv;
 
-    // Guard against divergence
-    if (isNaN(newRate) || !isFinite(newRate)) {
-      return rate;
-    }
+    if (isNaN(newRate) || !isFinite(newRate)) break;
 
-    // Clamp to reasonable bounds (-0.99 to 10 i.e. -99% to 1000%)
-    rate = Math.max(-0.99, Math.min(10, newRate));
+    // Clamp to reasonable bounds (-0.99 to 2.0 i.e. -99% to 200%)
+    rate = Math.max(-0.99, Math.min(2.0, newRate));
+  }
+
+  // Sanity check: if rate hit bounds, try bisection method
+  if (rate >= 1.99 || rate <= -0.98) {
+    let low = -0.99;
+    let high = 2.0;
+    const npvLow = npvAtRate(low);
+    const npvHigh = npvAtRate(high);
+
+    // Only bisect if NPV changes sign in range
+    if (npvLow * npvHigh < 0) {
+      for (let i = 0; i < 100; i++) {
+        const mid = (low + high) / 2;
+        const npvMid = npvAtRate(mid);
+        if (Math.abs(npvMid) < 1e-6) {
+          rate = mid;
+          break;
+        }
+        if (npvMid * npvLow < 0) {
+          high = mid;
+        } else {
+          low = mid;
+        }
+        rate = mid;
+      }
+    } else {
+      // Can't find a root — return a simple CAGR approximation
+      const years = flows[flows.length - 1].years;
+      if (years > 0 && totalInvested > 0) {
+        rate = Math.pow(finalValue / totalInvested, 1 / years) - 1;
+        rate = Math.max(-0.99, Math.min(2.0, rate));
+      } else {
+        rate = 0;
+      }
+    }
   }
 
   return rate;

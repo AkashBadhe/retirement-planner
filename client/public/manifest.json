@@ -41,11 +41,12 @@
         {
             "src": "logo512.png",
             "sizes": "512x512",
-            "type": "image/png"
+            "type": "image/png",
+            "purpose": "any"
         },
         {
-            "src": "android-icon-192x192.png",
-            "sizes": "192x192",
+            "src": "logo512.png",
+            "sizes": "512x512",
             "type": "image/png",
             "purpose": "maskable"
         }

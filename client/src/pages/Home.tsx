@@ -14,6 +14,8 @@ import ShowChartIcon from '@mui/icons-material/ShowChart';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import HistoryIcon from '@mui/icons-material/History';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import AnalyticsIcon from '@mui/icons-material/Analytics';
+import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
 import calculators from '../data/calculators';
 
 const StyledGrid = styled(Grid)`
@@ -41,6 +43,8 @@ const iconMap: Record<string, React.ReactNode> = {
   account_balance: <AccountBalanceIcon sx={{ fontSize: 48 }} color='primary' />,
   history: <HistoryIcon sx={{ fontSize: 48 }} color='primary' />,
   account_balance_wallet: <AccountBalanceWalletIcon sx={{ fontSize: 48 }} color='primary' />,
+  analytics: <AnalyticsIcon sx={{ fontSize: 48 }} color='primary' />,
+  list: <FormatListBulletedIcon sx={{ fontSize: 48 }} color='primary' />,
 };
 
 const Home: React.FC = () => {

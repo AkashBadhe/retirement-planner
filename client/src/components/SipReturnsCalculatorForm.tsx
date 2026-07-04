@@ -169,6 +169,17 @@ const SipReturnsCalculatorForm: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sipAmount, frequency]);
 
+  // Auto-recalculate when dates change via period selector (not manual typing)
+  const periodTriggered = useRef(false);
+  useEffect(() => {
+    if (!periodTriggered.current) return;
+    periodTriggered.current = false;
+    if (hasCalculated.current && symbol.trim()) {
+      handleCalculate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate]);
+
   // Recalculate on date blur (not on every keystroke)
   const handleDateBlur = () => {
     if (hasCalculated.current && symbol.trim()) {
@@ -393,6 +404,24 @@ const SipReturnsCalculatorForm: React.FC = () => {
   }
 
   function formatSymbolDisplay(symbol: string): string {
+    const indexLabels: Record<string, string> = {
+      '^NSEI': 'Nifty 50 (NSE)',
+      '^BSESN': 'Sensex (BSE)',
+      '^GSPC': 'S&P 500',
+      '^NDX': 'NASDAQ 100',
+      '^DJI': 'Dow Jones Industrial Average',
+    };
+
+    if (indexLabels[symbol]) return indexLabels[symbol];
+    if (symbol.startsWith('^')) {
+      return symbol.replace('^', '') + ' (Index)';
+    }
+    if (symbol.endsWith('-USD')) {
+      return symbol.replace('-USD', '') + ' (Crypto)';
+    }
+    if (symbol.endsWith('-INR')) {
+      return symbol.replace('-INR', '') + ' (Crypto/INR)';
+    }
     if (symbol.endsWith('.NS')) {
       return `${symbol.replace('.NS', '')} (NSE)`;
     }
@@ -515,11 +544,11 @@ const SipReturnsCalculatorForm: React.FC = () => {
           renderInput={params => (
             <TextField
               {...params}
-              label='Search Stock / ETF'
+              label='Search Stock / ETF / Index'
               variant='outlined'
               size='small'
               placeholder='Type company name or symbol...'
-              helperText='e.g. Infosys, TCS, Apple, Nifty'
+              helperText='e.g. Infosys, TCS, Apple, Nifty, NASDAQ 100, S&P 500'
               sx={{ mb: 2 }}
             />
           )}
@@ -588,12 +617,7 @@ const SipReturnsCalculatorForm: React.FC = () => {
             const start = new Date(today);
             start.setFullYear(start.getFullYear() - parseInt(val, 10));
             setStartDate(start.toISOString().split('T')[0]);
-            // Trigger recalculation after state updates
-            setTimeout(() => {
-              if (hasCalculated.current && symbol.trim()) {
-                handleCalculate();
-              }
-            }, 0);
+            periodTriggered.current = true;
           }}
         />
 

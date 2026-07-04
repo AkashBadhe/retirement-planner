@@ -4,10 +4,62 @@ import { firstValueFrom } from 'rxjs';
 
 const YAHOO_CHART_URL = 'https://query1.finance.yahoo.com/v8/finance/chart/';
 const YAHOO_SEARCH_URL = 'https://query1.finance.yahoo.com/v1/finance/search';
+const YAHOO_QUOTE_SUMMARY_URL = 'https://query2.finance.yahoo.com/v10/finance/quoteSummary/';
+const YAHOO_TIMESERIES_URL = 'https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/';
 
 @Injectable()
 export class FinanceService {
+  private crumb: string | null = null;
+  private cookie: string | null = null;
+  private crumbExpiry = 0;
+
   constructor(private readonly httpService: HttpService) {}
+
+  /**
+   * Fetches a valid crumb + cookie pair from Yahoo Finance.
+   * Yahoo requires this for authenticated endpoints like quoteSummary.
+   */
+  private async refreshCrumb(): Promise<void> {
+    // Only refresh if expired (cache for 5 minutes)
+    if (this.crumb && this.cookie && Date.now() < this.crumbExpiry) {
+      return;
+    }
+
+    try {
+      // Step 1: Get consent cookie by visiting the main page
+      const consentRes = await firstValueFrom(
+        this.httpService.get('https://fc.yahoo.com', {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          },
+          validateStatus: () => true, // accept any status
+        }),
+      );
+
+      // Extract set-cookie headers
+      const setCookies: string[] = consentRes.headers['set-cookie'] || [];
+      const cookieStr = setCookies.map(c => c.split(';')[0]).join('; ');
+
+      // Step 2: Fetch the crumb using the cookie
+      const crumbRes = await firstValueFrom(
+        this.httpService.get('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            Cookie: cookieStr,
+          },
+          responseType: 'text',
+        }),
+      );
+
+      this.crumb = crumbRes.data;
+      this.cookie = cookieStr;
+      this.crumbExpiry = Date.now() + 5 * 60 * 1000; // 5 min cache
+    } catch {
+      // If crumb fetch fails, reset and let the request try without it
+      this.crumb = null;
+      this.cookie = null;
+    }
+  }
 
   async getHistoricalData(
     symbol: string,
@@ -62,7 +114,14 @@ export class FinanceService {
 
       return quotes
         .filter(
-          (q: any) => q.quoteType === 'EQUITY' || q.quoteType === 'ETF',
+          (q: any) =>
+            q.quoteType === 'EQUITY' ||
+            q.quoteType === 'ETF' ||
+            q.quoteType === 'INDEX' ||
+            q.quoteType === 'CRYPTOCURRENCY' ||
+            q.quoteType === 'MUTUALFUND' ||
+            q.quoteType === 'FUTURE' ||
+            q.quoteType === 'COMMODITY',
         )
         .map((q: any) => ({
           symbol: q.symbol,
@@ -108,5 +167,229 @@ export class FinanceService {
         HttpStatus.BAD_GATEWAY,
       );
     }
+  }
+
+  async getStockFundamentals(symbol: string) {
+    try {
+      await this.refreshCrumb();
+
+      const modules = [
+        'defaultKeyStatistics',
+        'financialData',
+        'summaryDetail',
+        'earnings',
+        'earningsTrend',
+        'incomeStatementHistory',
+        'balanceSheetHistory',
+        'cashflowStatementHistory',
+        'summaryProfile',
+      ].join(',');
+
+      let url = `${YAHOO_QUOTE_SUMMARY_URL}${encodeURIComponent(symbol)}?modules=${modules}`;
+      if (this.crumb) {
+        url += `&crumb=${encodeURIComponent(this.crumb)}`;
+      }
+
+      const headers: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      };
+      if (this.cookie) {
+        headers['Cookie'] = this.cookie;
+      }
+
+      const { data } = await firstValueFrom(
+        this.httpService.get(url, { headers }),
+      );
+
+      if (data.quoteSummary?.error) {
+        throw new HttpException(
+          data.quoteSummary.error.description || 'Symbol not found',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      const result = data.quoteSummary?.result?.[0];
+      if (!result) {
+        throw new HttpException('No fundamental data available', HttpStatus.NOT_FOUND);
+      }
+
+      return result;
+    } catch (error: any) {
+      if (error instanceof HttpException) throw error;
+
+      // If we got a 401, invalidate crumb and retry once
+      if (error.response?.status === 401) {
+        this.crumb = null;
+        this.cookie = null;
+        this.crumbExpiry = 0;
+      }
+
+      const status = error.response?.status || HttpStatus.BAD_GATEWAY;
+      const message =
+        error.response?.data?.quoteSummary?.error?.description ||
+        'Failed to fetch fundamental data from Yahoo Finance';
+
+      throw new HttpException(message, status);
+    }
+  }
+
+  /**
+   * Fetches annual historical fundamentals (revenue, net income, EPS, margins,
+   * ROE, FCF, debt, dividends) from Yahoo's fundamentals time-series API and
+   * returns a normalized, charting-friendly payload.
+   */
+  async getFundamentalsHistory(symbol: string, years: string = '5') {
+    try {
+      await this.refreshCrumb();
+
+      const now = Math.floor(Date.now() / 1000);
+      const lookbackYears = years === 'max' ? 15 : years === '10' ? 11 : 6;
+      const period1 = now - lookbackYears * 365 * 24 * 60 * 60;
+
+      const types = [
+        'annualTotalRevenue',
+        'annualNetIncome',
+        'annualDilutedEPS',
+        'annualBasicEPS',
+        'annualGrossProfit',
+        'annualOperatingIncome',
+        'annualStockholdersEquity',
+        'annualFreeCashFlow',
+        'annualTotalDebt',
+        'annualCashDividendsPaid',
+      ];
+
+      const url =
+        `${YAHOO_TIMESERIES_URL}${encodeURIComponent(symbol)}` +
+        `?type=${types.join(',')}&period1=${period1}&period2=${now}` +
+        (this.crumb ? `&crumb=${encodeURIComponent(this.crumb)}` : '');
+
+      const headers: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      };
+      if (this.cookie) headers['Cookie'] = this.cookie;
+
+      const { data } = await firstValueFrom(this.httpService.get(url, { headers }));
+
+      const results: any[] = data?.timeseries?.result || [];
+      return this.normalizeTimeseries(symbol, results);
+    } catch (error: any) {
+      if (error instanceof HttpException) throw error;
+
+      if (error.response?.status === 401) {
+        this.crumb = null;
+        this.cookie = null;
+        this.crumbExpiry = 0;
+      }
+
+      const status = error.response?.status || HttpStatus.BAD_GATEWAY;
+      throw new HttpException(
+        'Failed to fetch historical fundamentals from Yahoo Finance',
+        status,
+      );
+    }
+  }
+
+  /**
+   * Converts Yahoo's time-series result array into per-metric year/value
+   * arrays, deriving margins and ROE. Tolerant of missing series.
+   */
+  private normalizeTimeseries(symbol: string, results: any[]) {
+    // Map: yahoo type key -> [{ year, value }]
+    const rawSeries: Record<string, { year: number; value: number }[]> = {};
+
+    for (const block of results) {
+      // Each block has keys like "annualTotalRevenue" alongside "timestamp"/"meta"
+      const typeKey = Object.keys(block).find(
+        k => k !== 'timestamp' && k !== 'meta' && Array.isArray(block[k]),
+      );
+      if (!typeKey) continue;
+
+      const points: { year: number; value: number }[] = [];
+      for (const entry of block[typeKey]) {
+        if (!entry || entry.reportedValue == null) continue;
+        const dateStr: string = entry.asOfDate || '';
+        const year = parseInt(dateStr.slice(0, 4), 10);
+        const value = Number(entry.reportedValue.raw);
+        if (!isNaN(year) && !isNaN(value)) {
+          points.push({ year, value });
+        }
+      }
+      if (points.length > 0) {
+        points.sort((a, b) => a.year - b.year);
+        rawSeries[typeKey] = points;
+      }
+    }
+
+    const get = (key: string) => rawSeries[key];
+
+    // Helper to align two series by year and compute a derived value
+    const derive = (
+      aKey: string,
+      bKey: string,
+      fn: (a: number, b: number) => number,
+    ): { year: number; value: number }[] => {
+      const a = get(aKey);
+      const b = get(bKey);
+      if (!a || !b) return [];
+      const bByYear = new Map(b.map(p => [p.year, p.value]));
+      const out: { year: number; value: number }[] = [];
+      for (const p of a) {
+        const bv = bByYear.get(p.year);
+        if (bv != null && bv !== 0) {
+          out.push({ year: p.year, value: fn(p.value, bv) });
+        }
+      }
+      return out;
+    };
+
+    const revenue = get('annualTotalRevenue') || [];
+    const netIncome = get('annualNetIncome') || [];
+    const eps = get('annualDilutedEPS') || get('annualBasicEPS') || [];
+    const grossProfit = get('annualGrossProfit');
+    const operatingIncome = get('annualOperatingIncome');
+    const equity = get('annualStockholdersEquity');
+    const fcf = get('annualFreeCashFlow') || [];
+    const totalDebt = get('annualTotalDebt') || [];
+    const dividendsPaid = get('annualCashDividendsPaid');
+
+    // Margins (percent)
+    const grossMargin = grossProfit ? derive('annualGrossProfit', 'annualTotalRevenue', (g, r) => (g / r) * 100) : [];
+    const operatingMargin = operatingIncome ? derive('annualOperatingIncome', 'annualTotalRevenue', (o, r) => (o / r) * 100) : [];
+    const netMargin = derive('annualNetIncome', 'annualTotalRevenue', (n, r) => (n / r) * 100);
+    const roe = equity ? derive('annualNetIncome', 'annualStockholdersEquity', (n, e) => (n / e) * 100) : [];
+
+    // Dividend paid is negative (cash outflow); flip sign for display
+    const dividends = (dividendsPaid || []).map(p => ({ year: p.year, value: Math.abs(p.value) }));
+
+    const allYears = new Set<number>();
+    [revenue, netIncome, eps, fcf, totalDebt].forEach(s => s.forEach(p => allYears.add(p.year)));
+    const fiscalYears = Array.from(allYears).sort((a, b) => a - b);
+
+    const series: Record<string, { year: number; value: number }[]> = {};
+    const put = (k: string, v: { year: number; value: number }[]) => {
+      if (v && v.length > 0) series[k] = v;
+    };
+    put('revenue', revenue);
+    put('netIncome', netIncome);
+    put('eps', eps);
+    put('grossMargin', grossMargin);
+    put('operatingMargin', operatingMargin);
+    put('netMargin', netMargin);
+    put('roe', roe);
+    put('freeCashFlow', fcf);
+    put('totalDebt', totalDebt);
+    put('dividendPerShare', dividends);
+
+    return {
+      symbol,
+      fiscalYears,
+      series,
+      coverage: {
+        from: fiscalYears[0] ?? null,
+        to: fiscalYears[fiscalYears.length - 1] ?? null,
+        availableYears: fiscalYears.length,
+      },
+    };
   }
 }

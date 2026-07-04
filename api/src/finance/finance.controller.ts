@@ -1,6 +1,8 @@
 import { Controller, Get, Query, HttpException, HttpStatus } from '@nestjs/common';
 import { FinanceService } from './finance.service';
+import { Public } from '../common/decorators/public.decorator';
 
+@Public()
 @Controller('finance')
 export class FinanceController {
   constructor(private readonly financeService: FinanceService) {}
@@ -57,5 +59,41 @@ export class FinanceController {
     @Query('to') to: string = 'INR',
   ) {
     return this.financeService.getExchangeRate(from, to);
+  }
+
+  /**
+   * GET /api/finance/fundamentals?symbol=INFY.NS
+   * Returns stock fundamental data (P/E, EPS, revenue, etc.)
+   */
+  @Get('fundamentals')
+  async getFundamentals(@Query('symbol') symbol: string) {
+    if (!symbol) {
+      throw new HttpException(
+        'symbol query parameter is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    return this.financeService.getStockFundamentals(symbol);
+  }
+
+  /**
+   * GET /api/finance/fundamentals-history?symbol=INFY.NS&years=5
+   * Returns annual historical fundamentals (revenue, margins, ROE, etc.)
+   */
+  @Get('fundamentals-history')
+  async getFundamentalsHistory(
+    @Query('symbol') symbol: string,
+    @Query('years') years: string = '5',
+  ) {
+    if (!symbol) {
+      throw new HttpException(
+        'symbol query parameter is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const allowed = ['5', '10', 'max'];
+    const yrs = allowed.includes(years) ? years : '5';
+    return this.financeService.getFundamentalsHistory(symbol, yrs);
   }
 }

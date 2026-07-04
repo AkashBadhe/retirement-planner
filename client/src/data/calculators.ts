@@ -48,6 +48,20 @@ const calculators: Calculator[] = [
     path: '/swp-calculator',
     icon: 'account_balance_wallet',
   },
+  {
+    title: 'Stock Intrinsic Value',
+    description:
+      'Calculate intrinsic value of a stock, find buy/exit levels, and get fundamental analysis.',
+    path: '/stock-intrinsic-value',
+    icon: 'analytics',
+  },
+  {
+    title: 'Watchlist',
+    description:
+      'Track intrinsic value, upside, and quality across all your stocks in one table. Import from CSV.',
+    path: '/watchlist',
+    icon: 'list',
+  },
 ];
 
 export default calculators;

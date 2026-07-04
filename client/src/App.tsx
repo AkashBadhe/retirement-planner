@@ -16,6 +16,8 @@ import CagrCalculatorPage from './pages/CagrCalculatorPage';
 import EmiCalculatorPage from './pages/EmiCalculatorPage';
 import SipReturnsPage from './pages/SipReturnsPage';
 import SwpCalculatorPage from './pages/SwpCalculatorPage';
+import StockIntrinsicValuePage from './pages/StockIntrinsicValuePage';
+import WatchlistPage from './pages/WatchlistPage';
 
 // Adjust the Container to include bottom padding
 const StyledContainer = styled(Container)`
@@ -37,6 +39,8 @@ function App() {
             <Route path='/emi-calculator' element={<EmiCalculatorPage />} />
             <Route path='/sip-returns' element={<SipReturnsPage />} />
             <Route path='/swp-calculator' element={<SwpCalculatorPage />} />
+            <Route path='/stock-intrinsic-value' element={<StockIntrinsicValuePage />} />
+            <Route path='/watchlist' element={<WatchlistPage />} />
           </Routes>
         </StyledContainer>
         <Footer />

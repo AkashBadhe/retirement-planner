@@ -89,6 +89,29 @@ function formatSymbol(symbol: string): string {
     return trimmed.replace('BSE:', '') + '.BO';
   }
 
+  const knownIndexMappings: Record<string, string> = {
+    'NIFTY': '^NSEI',
+    'NIFTY 50': '^NSEI',
+    'NSEI': '^NSEI',
+    'SENSEX': '^BSESN',
+    'BSE SENSEX': '^BSESN',
+    'S&P 500': '^GSPC',
+    'SP500': '^GSPC',
+    'S&P500': '^GSPC',
+    'SNP500': '^GSPC',
+    'GSPC': '^GSPC',
+    'NASDAQ 100': '^NDX',
+    'NASDAQ100': '^NDX',
+    'NDX': '^NDX',
+    'DOW': '^DJI',
+    'DJI': '^DJI',
+    'DOW JONES': '^DJI',
+  };
+
+  if (knownIndexMappings[trimmed]) {
+    return knownIndexMappings[trimmed];
+  }
+
   const indianSymbols = [
     'NIFTYBEES', 'GOLDBEES', 'LIQUIDBEES', 'BANKBEES', 'ITBEES',
     'INFY', 'TCS', 'RELIANCE', 'HDFCBANK', 'ICICIBANK', 'SBIN',
@@ -144,6 +167,72 @@ export async function getExchangeRate(from: string = 'USD', to: string = 'INR'):
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error('Failed to fetch exchange rate');
+  }
+  return response.json();
+}
+
+export interface StockFundamentals {
+  defaultKeyStatistics: any;
+  financialData: any;
+  summaryDetail: any;
+  earnings: any;
+  earningsTrend: any;
+  incomeStatementHistory: any;
+  balanceSheetHistory: any;
+  cashflowStatementHistory: any;
+  summaryProfile: any;
+}
+
+export async function fetchStockFundamentals(symbol: string): Promise<StockFundamentals> {
+  const formattedSymbol = formatSymbol(symbol);
+  const url = `${API_BASE_URL}/finance/fundamentals?symbol=${encodeURIComponent(formattedSymbol)}`;
+
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(
+      errorData.message || `Failed to fetch fundamentals for ${symbol}. Please check the symbol and try again.`,
+    );
+  }
+
+  return response.json();
+}
+
+export interface YearValue {
+  year: number;
+  value: number;
+}
+
+export interface FundamentalsHistoryResponse {
+  symbol: string;
+  fiscalYears: number[];
+  series: {
+    revenue?: YearValue[];
+    netIncome?: YearValue[];
+    eps?: YearValue[];
+    grossMargin?: YearValue[];
+    operatingMargin?: YearValue[];
+    netMargin?: YearValue[];
+    roe?: YearValue[];
+    freeCashFlow?: YearValue[];
+    totalDebt?: YearValue[];
+    dividendPerShare?: YearValue[];
+  };
+  coverage: { from: number | null; to: number | null; availableYears: number };
+}
+
+export async function fetchFundamentalsHistory(
+  symbol: string,
+  years: '5' | '10' | 'max' = 'max',
+): Promise<FundamentalsHistoryResponse> {
+  const formattedSymbol = formatSymbol(symbol);
+  const url = `${API_BASE_URL}/finance/fundamentals-history?symbol=${encodeURIComponent(formattedSymbol)}&years=${years}`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to fetch historical fundamentals for ${symbol}.`);
   }
   return response.json();
 }

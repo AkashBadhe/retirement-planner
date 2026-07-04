@@ -189,3 +189,43 @@ financial-calculators/
 - All monetary values assume Indian Rupee (₹) with Cr/Lac formatting
 - Docker setup uses `serve` for static file hosting on port 5000
 - The `App.scss` file exists but is empty/unused
+
+---
+
+## Stock Analysis Suite (added)
+
+Beyond the basic calculators, the app now has a stock research suite:
+
+### Stock Intrinsic Value Calculator (`/stock-intrinsic-value`)
+- `components/StockIntrinsicValueForm.tsx` + `pages/StockIntrinsicValuePage.tsx`
+- Valuation engine in `services/valuation.ts`:
+  - **DCF** (FCF-based, discounted at WACC via CAPM) with an **earnings-based fallback**
+    (discounted at cost of equity) for banks/financials where FCF isn't meaningful.
+  - **Relative valuation** from quality-adjusted sector multiples (P/E, EV/EBITDA weighted
+    higher than P/S, P/B), aggregated robustly (median + outlier trim).
+  - **Intrinsic value = average(DCF, Relative)**, AlphaSpread-style.
+  - **Bear / Base / Bull scenarios** (`calculateScenarios`) varying growth.
+  - **Confidence assessment** (`assessConfidence`) + **business quality score** (0–100).
+- Region-aware assumptions (risk-free rate, ERP, tax, terminal growth) keyed by currency.
+- Visuals: `ValuationGauge`, `QualityScoreCard`, scenario toggle, price-vs-intrinsic chart.
+
+### Financial History Dashboard
+- `components/history/FinancialHistory.tsx` (+ `MetricChart`, `HistorySummaryStrip`)
+- Backend: `GET /api/finance/fundamentals-history` proxies Yahoo's fundamentals
+  time-series; `services/fundamentalsHistory.ts` has the calc utils (CAGR, P/E, etc.).
+- 5Y default, 10Y/Max toggle; charts for revenue, income, margins, ROE, FCF, debt, P/E.
+- Spec: `.kiro/specs/fundamental-history-charts/`.
+
+### Watchlist (`/watchlist`)
+- `components/WatchlistTable.tsx` + `pages/WatchlistPage.tsx`
+- Add/search stocks, **CSV import/export**, sortable table of intrinsic value, upside,
+  signal, quality, P/E, ROE across all holdings. Persisted in localStorage
+  (`services/watchlist.ts`). Row click opens the detailed analysis (symbol passed via
+  router state). Multi-symbol valuation via `services/quickValuation.ts`.
+
+### Dependencies
+- Charts use **recharts**. No CSV library — `services/watchlist.ts` has a small CSV parser.
+
+### Backend finance proxy notes
+- Yahoo `quoteSummary` and `fundamentals-timeseries` require a **crumb + cookie**;
+  `FinanceService.refreshCrumb()` handles this. The finance controller is `@Public()`.

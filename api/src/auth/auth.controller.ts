@@ -158,25 +158,27 @@ export class AuthController {
     @Request() req: any,
     @Response({ passthrough: true }) res: ExpressResponse,
   ) {
+    const clientUrl = this.configService.get<string>('cors.origin');
+    console.log('[GoogleCallback] Reached callback handler.');
+    console.log('[GoogleCallback] clientUrl (redirect target):', clientUrl);
+    console.log('[GoogleCallback] req.user present:', !!req.user, 'hasAccessToken:', !!req.user?.accessToken);
     try {
-      // req.user is already the tokens object set by GoogleStrategy
       const result = req.user;
 
       if (!result?.accessToken) {
         throw new Error('OAuth login failed: no token returned from strategy');
       }
 
-      // Set refresh token in httpOnly cookie
       this.setRefreshTokenCookie(res, result.refreshToken);
 
-      // Redirect to frontend with access token
-      const clientUrl = this.configService.get<string>('cors.origin');
-      res.redirect(`${clientUrl}/auth/callback?token=${result.accessToken}`);
+      const redirectUrl = `${clientUrl}/#/auth/callback?token=${result.accessToken}`;
+      console.log('[GoogleCallback] Redirecting to:', redirectUrl.substring(0, 80) + '...');
+      res.redirect(redirectUrl);
       return;
     } catch (error: any) {
-      const clientUrl = this.configService.get<string>('cors.origin');
+      console.error('[GoogleCallback] ERROR:', error?.message, error?.stack);
       const message = encodeURIComponent(error?.message || 'OAuth login failed');
-      res.redirect(`${clientUrl}/auth/callback?error=${message}`);
+      res.redirect(`${clientUrl}/#/auth/callback?error=${message}`);
       return;
     }
   }
@@ -209,14 +211,14 @@ export class AuthController {
       // Set refresh token in httpOnly cookie
       this.setRefreshTokenCookie(res, result.refreshToken);
 
-      // Redirect to frontend with access token
+      // Redirect to frontend with access token (HashRouter uses /#/ prefix)
       const clientUrl = this.configService.get<string>('cors.origin');
-      res.redirect(`${clientUrl}/auth/callback?token=${result.accessToken}`);
+      res.redirect(`${clientUrl}/#/auth/callback?token=${result.accessToken}`);
       return;
     } catch (error: any) {
       const clientUrl = this.configService.get<string>('cors.origin');
       const message = encodeURIComponent(error?.message || 'OAuth login failed');
-      res.redirect(`${clientUrl}/auth/callback?error=${message}`);
+      res.redirect(`${clientUrl}/#/auth/callback?error=${message}`);
       return;
     }
   }

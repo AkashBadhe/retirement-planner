@@ -19,21 +19,32 @@ import {
   Alert,
   Tooltip,
   LinearProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import DownloadIcon from '@mui/icons-material/Download';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { searchSymbols, SymbolSearchResult } from '../services/yahooFinance';
-import { quickValuation, QuickValuation } from '../services/quickValuation';
+import { quickValuationBatch, QuickValuation } from '../services/quickValuation';
 import {
   loadWatchlist,
-  saveWatchlist,
   addSymbol,
   removeSymbol,
   parseSymbolsFromCsv,
   downloadCsv,
+  fetchRemoteWatchlist,
+  saveRemoteWatchlist,
+  getClientId,
 } from '../services/watchlist';
+import { useAuth } from '../contexts/AuthContext';
 
 type Row = QuickValuation & { loading?: boolean };
 
@@ -64,39 +75,63 @@ function formatSymbolDisplay(symbol: string): string {
 
 const WatchlistTable: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [symbols, setSymbols] = useState<string[]>([]);
   const [rows, setRows] = useState<Record<string, Row>>({});
   const [searchResults, setSearchResults] = useState<SymbolSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [inputDisplay, setInputDisplay] = useState('');
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importMarket, setImportMarket] = useState<string>('NSE');
+  const [pendingImportSymbols, setPendingImportSymbols] = useState<string[]>([]);
   const [sortKey, setSortKey] = useState<SortKey>('upsidePct');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
   const fileInput = useRef<HTMLInputElement | null>(null);
 
-  // Load persisted symbols on mount
-  useEffect(() => {
-    setSymbols(loadWatchlist());
-  }, []);
+  // Track whether the initial remote load has happened, to avoid a spurious
+  // save that could overwrite the DB with the local cache before it loads.
+  const hydrated = useRef(false);
 
-  // Persist whenever symbols change
+  // Load from the server (with local cache shown immediately) on mount
   useEffect(() => {
-    saveWatchlist(symbols);
+    setSymbols(loadWatchlist()); // instant from cache
+    fetchRemoteWatchlist(user?.id)
+      .then(remote => setSymbols(remote))
+      .finally(() => {
+        hydrated.current = true;
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  // Persist to the server (and local cache) whenever symbols change post-hydration
+  useEffect(() => {
+    if (!hydrated.current) return;
+    saveRemoteWatchlist(symbols, user?.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbols]);
 
-  // Fetch valuation for a single symbol
-  const loadRow = useCallback(async (symbol: string) => {
-    setRows(prev => ({ ...prev, [symbol]: { ...(prev[symbol] as Row), symbol, loading: true } as Row }));
-    const result = await quickValuation(symbol);
-    setRows(prev => ({ ...prev, [symbol]: { ...result, loading: false } }));
+  // Load valuations for a set of symbols in ONE batch request (cache-backed)
+  const loadBatch = useCallback(async (syms: string[], force = false) => {
+    if (syms.length === 0) return;
+    setRows(prev => {
+      const next = { ...prev };
+      syms.forEach(s => { next[s] = { ...(next[s] as Row), symbol: s, loading: true } as Row; });
+      return next;
+    });
+    const map = await quickValuationBatch(syms, force);
+    setRows(prev => {
+      const next = { ...prev };
+      Object.entries(map).forEach(([s, r]) => { next[s] = { ...r, loading: false }; });
+      return next;
+    });
   }, []);
 
-  // Load any symbols that don't yet have data
+  // Load any symbols that don't yet have data (batched)
   useEffect(() => {
-    symbols.forEach(s => {
-      if (!rows[s]) loadRow(s);
-    });
+    const missing = symbols.filter(s => !rows[s]);
+    if (missing.length > 0) loadBatch(missing);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbols]);
 
@@ -117,7 +152,7 @@ const WatchlistTable: React.FC = () => {
   };
 
   const handleRefreshAll = () => {
-    symbols.forEach(s => loadRow(s));
+    loadBatch(symbols, true); // force = bypass cache, re-fetch from Yahoo
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -131,12 +166,34 @@ const WatchlistTable: React.FC = () => {
         setImportMsg('No valid symbols found in the file.');
         return;
       }
-      const next = parsed.reduce((acc, s) => addSymbol(acc, s), symbols);
-      setSymbols(next);
-      setImportMsg(`Imported ${parsed.length} symbol(s).`);
+      setPendingImportSymbols(parsed);
+      setImportDialogOpen(true);
     };
     reader.readAsText(file);
     e.target.value = '';
+  };
+
+  const handleImportConfirm = () => {
+    // Apply exchange suffix based on selected market
+    const suffixMap: Record<string, string> = {
+      NSE: '.NS',
+      BSE: '.BO',
+      US: '',       // US symbols don't need a suffix
+      NONE: '',     // User wants to import raw (already has suffixes)
+    };
+    const suffix = suffixMap[importMarket] ?? '.NS';
+
+    const transformed = pendingImportSymbols.map(s => {
+      // If symbol already has a dot-suffix (like .NS, .BO, .L), keep it as-is
+      if (s.includes('.') || s.startsWith('^')) return s;
+      return s + suffix;
+    });
+
+    const next = transformed.reduce((acc, s) => addSymbol(acc, s), symbols);
+    setSymbols(next);
+    setImportMsg(`Imported ${transformed.length} symbol(s) for ${importMarket}.`);
+    setImportDialogOpen(false);
+    setPendingImportSymbols([]);
   };
 
   const handleSort = (key: SortKey) => {
@@ -231,6 +288,36 @@ const WatchlistTable: React.FC = () => {
       </Box>
 
       {importMsg && <Alert severity='info' sx={{ mb: 2 }} onClose={() => setImportMsg(null)}>{importMsg}</Alert>}
+
+      {/* Market selector dialog for CSV import */}
+      <Dialog open={importDialogOpen} onClose={() => setImportDialogOpen(false)} maxWidth='xs' fullWidth>
+        <DialogTitle>Select Market for Imported Symbols</DialogTitle>
+        <DialogContent>
+          <Typography variant='body2' color='textSecondary' sx={{ mb: 2 }}>
+            Found <strong>{pendingImportSymbols.length}</strong> symbol(s) in the file.
+            Select the exchange these stocks belong to so we can look them up correctly.
+          </Typography>
+          <FormControl fullWidth size='small'>
+            <InputLabel>Market / Exchange</InputLabel>
+            <Select value={importMarket} label='Market / Exchange' onChange={e => setImportMarket(e.target.value)}>
+              <MenuItem value='NSE'>NSE (India — National Stock Exchange)</MenuItem>
+              <MenuItem value='BSE'>BSE (India — Bombay Stock Exchange)</MenuItem>
+              <MenuItem value='US'>US (NYSE / NASDAQ)</MenuItem>
+              <MenuItem value='NONE'>Other / Already formatted (keep as-is)</MenuItem>
+            </Select>
+          </FormControl>
+          <Typography variant='caption' color='textSecondary' sx={{ mt: 1.5, display: 'block' }}>
+            Preview: {pendingImportSymbols.slice(0, 5).join(', ')}{pendingImportSymbols.length > 5 ? '…' : ''}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setImportDialogOpen(false)}>Cancel</Button>
+          <Button variant='contained' onClick={handleImportConfirm}>
+            Import {pendingImportSymbols.length} symbols
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {loadingCount > 0 && <LinearProgress sx={{ mb: 1 }} />}
 
       {symbols.length === 0 ? (

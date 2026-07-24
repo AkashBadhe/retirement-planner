@@ -78,7 +78,7 @@ export async function fetchHistoricalData(
   return { meta, prices };
 }
 
-function formatSymbol(symbol: string): string {
+export function formatSymbol(symbol: string): string {
   const trimmed = symbol.trim().toUpperCase();
 
   if (trimmed.startsWith('NSE:')) {
@@ -183,9 +183,9 @@ export interface StockFundamentals {
   summaryProfile: any;
 }
 
-export async function fetchStockFundamentals(symbol: string): Promise<StockFundamentals> {
+export async function fetchStockFundamentals(symbol: string, force = false): Promise<StockFundamentals> {
   const formattedSymbol = formatSymbol(symbol);
-  const url = `${API_BASE_URL}/finance/fundamentals?symbol=${encodeURIComponent(formattedSymbol)}`;
+  const url = `${API_BASE_URL}/finance/fundamentals?symbol=${encodeURIComponent(formattedSymbol)}${force ? '&force=true' : ''}`;
 
   const response = await fetch(url);
 
@@ -196,6 +196,24 @@ export async function fetchStockFundamentals(symbol: string): Promise<StockFunda
     );
   }
 
+  return response.json();
+}
+
+/**
+ * Fetch fundamentals for many symbols in a single request (cached server-side).
+ * Returns a map of formatted-symbol -> data (or null on failure).
+ */
+export async function fetchFundamentalsBatch(
+  symbols: string[],
+  force = false,
+): Promise<Record<string, any>> {
+  const formatted = symbols.map(s => formatSymbol(s));
+  const url = `${API_BASE_URL}/finance/fundamentals-batch?symbols=${encodeURIComponent(formatted.join(','))}${force ? '&force=true' : ''}`;
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error('Failed to fetch batch fundamentals.');
+  }
   return response.json();
 }
 

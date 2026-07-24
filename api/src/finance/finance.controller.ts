@@ -62,11 +62,14 @@ export class FinanceController {
   }
 
   /**
-   * GET /api/finance/fundamentals?symbol=INFY.NS
-   * Returns stock fundamental data (P/E, EPS, revenue, etc.)
+   * GET /api/finance/fundamentals?symbol=INFY.NS&force=false
+   * Returns stock fundamental data (P/E, EPS, revenue, etc.), cached in DB.
    */
   @Get('fundamentals')
-  async getFundamentals(@Query('symbol') symbol: string) {
+  async getFundamentals(
+    @Query('symbol') symbol: string,
+    @Query('force') force?: string,
+  ) {
     if (!symbol) {
       throw new HttpException(
         'symbol query parameter is required',
@@ -74,7 +77,26 @@ export class FinanceController {
       );
     }
 
-    return this.financeService.getStockFundamentals(symbol);
+    return this.financeService.getStockFundamentals(symbol, force === 'true');
+  }
+
+  /**
+   * GET /api/finance/fundamentals-batch?symbols=INFY.NS,TCS.NS&force=false
+   * Returns cached fundamentals for many symbols in one request (watchlist).
+   */
+  @Get('fundamentals-batch')
+  async getFundamentalsBatch(
+    @Query('symbols') symbols: string,
+    @Query('force') force?: string,
+  ) {
+    if (!symbols) {
+      throw new HttpException(
+        'symbols query parameter is required (comma-separated)',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const list = symbols.split(',').map(s => s.trim()).filter(Boolean);
+    return this.financeService.getFundamentalsBatch(list, force === 'true');
   }
 
   /**

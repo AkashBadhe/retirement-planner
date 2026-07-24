@@ -1,11 +1,17 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import { firstValueFrom } from 'rxjs';
+import { StockFundamentals } from './schemas/stock-fundamentals.schema';
 
 const YAHOO_CHART_URL = 'https://query1.finance.yahoo.com/v8/finance/chart/';
 const YAHOO_SEARCH_URL = 'https://query1.finance.yahoo.com/v1/finance/search';
 const YAHOO_QUOTE_SUMMARY_URL = 'https://query2.finance.yahoo.com/v10/finance/quoteSummary/';
 const YAHOO_TIMESERIES_URL = 'https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/';
+
+// How long cached fundamentals stay fresh (12 hours)
+const FUNDAMENTALS_TTL_MS = 12 * 60 * 60 * 1000;
 
 @Injectable()
 export class FinanceService {
@@ -13,7 +19,11 @@ export class FinanceService {
   private cookie: string | null = null;
   private crumbExpiry = 0;
 
-  constructor(private readonly httpService: HttpService) {}
+  constructor(
+    private readonly httpService: HttpService,
+    @InjectModel(StockFundamentals.name)
+    private readonly fundamentalsCache: Model<StockFundamentals>,
+  ) {}
 
   /**
    * Fetches a valid crumb + cookie pair from Yahoo Finance.
@@ -169,7 +179,58 @@ export class FinanceService {
     }
   }
 
-  async getStockFundamentals(symbol: string) {
+  /**
+   * Returns stock fundamentals, served from the MongoDB cache when fresh.
+   * Falls back to a Yahoo fetch (and refreshes the cache) when stale or forced.
+   * If Yahoo fails but a stale cache exists, the stale copy is returned.
+   */
+  async getStockFundamentals(symbol: string, force = false) {
+    const sym = symbol.trim().toUpperCase();
+
+    // 1. Try the cache
+    let cached: StockFundamentals | null = null;
+    try {
+      cached = await this.fundamentalsCache.findOne({ symbol: sym }).lean().exec() as any;
+    } catch {
+      // DB unavailable — proceed to live fetch
+    }
+
+    const isFresh = cached?.fetchedAt &&
+      Date.now() - new Date(cached.fetchedAt).getTime() < FUNDAMENTALS_TTL_MS;
+
+    if (cached && isFresh && !force) {
+      return cached.data;
+    }
+
+    // 2. Fetch fresh from Yahoo
+    try {
+      const result = await this.fetchFundamentalsFromYahoo(sym);
+
+      // 3. Update the cache (best-effort)
+      try {
+        await this.fundamentalsCache
+          .findOneAndUpdate(
+            { symbol: sym },
+            { $set: { symbol: sym, data: result, fetchedAt: new Date() } },
+            { upsert: true },
+          )
+          .exec();
+      } catch {
+        // ignore cache write failures
+      }
+
+      return result;
+    } catch (error) {
+      // 4. On failure, fall back to a stale cache if we have one
+      if (cached?.data) {
+        return cached.data;
+      }
+      throw error;
+    }
+  }
+
+  /** Low-level Yahoo quoteSummary fetch (no caching). */
+  private async fetchFundamentalsFromYahoo(symbol: string) {
     try {
       await this.refreshCrumb();
 
@@ -231,6 +292,26 @@ export class FinanceService {
 
       throw new HttpException(message, status);
     }
+  }
+
+  /**
+   * Batch fundamentals for many symbols — used by the watchlist so the whole
+   * list loads in a single request. Returns a map of symbol -> data|null.
+   * Cache-first per symbol; failures return null rather than aborting the batch.
+   */
+  async getFundamentalsBatch(symbols: string[], force = false) {
+    const unique = Array.from(new Set(symbols.map(s => s.trim().toUpperCase()).filter(Boolean)));
+    const out: Record<string, any> = {};
+
+    // Fetch sequentially to be gentle on Yahoo (cache hits are instant anyway)
+    for (const sym of unique) {
+      try {
+        out[sym] = await this.getStockFundamentals(sym, force);
+      } catch {
+        out[sym] = null;
+      }
+    }
+    return out;
   }
 
   /**

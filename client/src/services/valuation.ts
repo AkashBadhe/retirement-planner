@@ -144,9 +144,12 @@ function computeWacc(fundamentals: any, region: RegionParams, marketCap: number)
   if (beta <= 0) beta = 1;
   beta = Math.min(beta, 2.5);
 
-  // Floor cost of equity so very low-beta names don't get an unrealistically
-  // cheap discount rate that inflates the valuation.
-  const costOfEquity = Math.max(0.095, region.riskFreeRate + beta * region.equityRiskPremium);
+  // Floor cost of equity at the region's risk-free rate + 2% minimum spread,
+  // so zero-beta names still get a meaningful discount rate.
+  const costOfEquity = Math.max(
+    region.riskFreeRate + 0.02,
+    region.riskFreeRate + beta * region.equityRiskPremium,
+  );
 
   const totalDebt = raw(financialData, 'totalDebt')
     ?? raw(balanceSheet, 'totalDebt')
@@ -168,10 +171,9 @@ function computeWacc(fundamentals: any, region: RegionParams, marketCap: number)
   const debtWeight = v > 0 ? debt / v : 0;
 
   let wacc = equityWeight * costOfEquity + debtWeight * costOfDebtAfterTax;
-  // WACC must exceed terminal growth for a valid Gordon terminal value, and we
-  // floor it at a sensible equity discount rate so low-beta / debt-heavy names
-  // don't get an artificially low rate that inflates the valuation.
-  wacc = Math.max(wacc, region.terminalGrowth + 0.02, 0.095);
+  // WACC must exceed terminal growth for a valid Gordon terminal value.
+  // Floor at risk-free + 2% to prevent unrealistically low discount rates.
+  wacc = Math.max(wacc, region.terminalGrowth + 0.02, region.riskFreeRate + 0.02);
 
   return {
     costOfEquity,
@@ -205,11 +207,20 @@ export function estimateGrowthRate(fundamentals: any): number {
 
   let g = analystGrowth ?? earningsGrowth ?? revenueGrowth ?? 0.08;
 
-  // Analyst and trailing growth figures tend to be optimistic and are rarely
-  // sustainable for a full 10-year window. Apply a haircut and a conservative
-  // cap so high-flyers don't produce runaway valuations.
-  g = g * 0.75;
-  g = Math.max(0.03, Math.min(g, 0.15));
+  // Apply a moderate haircut: raw growth is optimistic over 10-year horizons, but
+  // we shouldn't over-penalize genuinely high-growth names. Use a sliding haircut:
+  // low growth keeps most of it, very high growth gets a bigger cut.
+  if (g > 0.25) {
+    // For very high growth (>25%), taper: keep first 25% fully, cut the rest by 50%
+    g = 0.25 + (g - 0.25) * 0.5;
+  }
+  // Mild haircut on everything: 10% cut acknowledges optimism
+  g = g * 0.9;
+
+  // Cap differently by region (set by the caller's terminalGrowth context, but
+  // since we don't have it here, use a generous 30% cap — the WACC handles the
+  // discount appropriately per region)
+  g = Math.max(0.03, Math.min(g, 0.30));
   return g;
 }
 
@@ -232,9 +243,11 @@ function getBaseFcf(fundamentals: any): number {
 }
 
 /**
- * DCF with a linear growth fade from the initial rate to terminal growth over
- * the projection horizon, then a Gordon Growth terminal value. Returns equity
- * value per share.
+ * Two-stage DCF: high growth for the first half of the projection (years 1–5),
+ * then a linear fade to terminal growth over the second half (years 6–10),
+ * followed by a Gordon Growth terminal value. This models how fast-growing
+ * companies sustain elevated growth before maturity — matching AlphaSpread-style
+ * valuations.
  */
 function computeDcfPerShare(
   baseFcf: number,
@@ -247,12 +260,21 @@ function computeDcfPerShare(
 ): number {
   if (baseFcf <= 0 || shares <= 0 || wacc <= terminalGrowth) return 0;
 
+  const highGrowthYears = Math.ceil(projectionYears / 2); // 5 of 10
+  const fadeYears = projectionYears - highGrowthYears; // 5
+
   let pvSum = 0;
   let fcf = baseFcf;
   for (let year = 1; year <= projectionYears; year++) {
-    // Linear fade of growth toward terminal growth
-    const t = (year - 1) / Math.max(1, projectionYears - 1);
-    const growth = initialGrowth + (terminalGrowth - initialGrowth) * t;
+    let growth: number;
+    if (year <= highGrowthYears) {
+      // Full growth rate for the first stage
+      growth = initialGrowth;
+    } else {
+      // Linear fade from initialGrowth to terminalGrowth over the second stage
+      const fadeProgress = (year - highGrowthYears) / fadeYears;
+      growth = initialGrowth + (terminalGrowth - initialGrowth) * fadeProgress;
+    }
     fcf = fcf * (1 + growth);
     pvSum += fcf / Math.pow(1 + wacc, year);
   }
@@ -269,10 +291,7 @@ function computeDcfPerShare(
 }
 
 /**
- * Earnings-based DCF for companies where Free Cash Flow is not meaningful
- * (banks, insurers, other financials). Projects net income (cash flow to
- * equity), discounts at the COST OF EQUITY, and does NOT subtract net debt
- * (the result is already an equity value). Returns value per share.
+ * Two-stage earnings-based DCF for financials (mirrors the FCF version).
  */
 function computeEarningsDcfPerShare(
   baseEarnings: number,
@@ -284,11 +303,19 @@ function computeEarningsDcfPerShare(
 ): number {
   if (baseEarnings <= 0 || shares <= 0 || costOfEquity <= terminalGrowth) return 0;
 
+  const highGrowthYears = Math.ceil(projectionYears / 2);
+  const fadeYears = projectionYears - highGrowthYears;
+
   let pvSum = 0;
   let earnings = baseEarnings;
   for (let year = 1; year <= projectionYears; year++) {
-    const t = (year - 1) / Math.max(1, projectionYears - 1);
-    const growth = initialGrowth + (terminalGrowth - initialGrowth) * t;
+    let growth: number;
+    if (year <= highGrowthYears) {
+      growth = initialGrowth;
+    } else {
+      const fadeProgress = (year - highGrowthYears) / fadeYears;
+      growth = initialGrowth + (terminalGrowth - initialGrowth) * fadeProgress;
+    }
     earnings = earnings * (1 + growth);
     pvSum += earnings / Math.pow(1 + costOfEquity, year);
   }
@@ -302,21 +329,78 @@ function computeEarningsDcfPerShare(
 }
 
 /**
- * Net income available to common shareholders — the base for the
- * earnings-based DCF. Falls back to EPS x shares.
+ * Net income for earnings DCF. Prefers FORWARD earnings (analyst estimate for
+ * next year × shares) over trailing, since for growth companies trailing
+ * dramatically understates near-term earning power.
  */
 function getBaseEarnings(fundamentals: any, shares: number): number {
   const keyStats = fundamentals.defaultKeyStatistics || {};
   const incomeStmt = fundamentals.incomeStatementHistory?.incomeStatementHistory?.[0];
 
+  // Forward EPS × shares is the strongest starting point for a growth DCF
+  const forwardEps = raw(keyStats, 'forwardEps');
+  if (forwardEps != null && forwardEps > 0 && shares > 0) return forwardEps * shares;
+
   const netIncome = raw(keyStats, 'netIncomeToCommon')
     ?? raw(incomeStmt, 'netIncome');
   if (netIncome != null && netIncome > 0) return netIncome;
 
-  const eps = raw(keyStats, 'trailingEps');
-  if (eps != null && eps > 0 && shares > 0) return eps * shares;
+  const trailingEps = raw(keyStats, 'trailingEps');
+  if (trailingEps != null && trailingEps > 0 && shares > 0) return trailingEps * shares;
 
   return 0;
+}
+
+/**
+ * Revenue-based two-stage DCF for high-growth companies with low/negative
+ * current profitability. Projects revenue at the growth rate, applies a target
+ * mature net margin to get implied future earnings, and discounts at WACC.
+ * This is how investment banks value early-stage, high-capex, or
+ * reinvestment-heavy businesses (renewables, SaaS, biotech, etc.).
+ */
+function computeRevenueDcfPerShare(
+  baseRevenue: number,
+  initialGrowth: number,
+  terminalGrowth: number,
+  targetMargin: number,
+  wacc: number,
+  netDebt: number,
+  shares: number,
+  projectionYears: number,
+): number {
+  if (baseRevenue <= 0 || shares <= 0 || wacc <= terminalGrowth) return 0;
+
+  const highGrowthYears = Math.ceil(projectionYears / 2);
+  const fadeYears = projectionYears - highGrowthYears;
+
+  let pvSum = 0;
+  let revenue = baseRevenue;
+  for (let year = 1; year <= projectionYears; year++) {
+    let growth: number;
+    if (year <= highGrowthYears) {
+      growth = initialGrowth;
+    } else {
+      const fadeProgress = (year - highGrowthYears) / fadeYears;
+      growth = initialGrowth + (terminalGrowth - initialGrowth) * fadeProgress;
+    }
+    revenue = revenue * (1 + growth);
+
+    // Margin ramps linearly toward the target over the projection period
+    const marginRamp = year / projectionYears;
+    const margin = targetMargin * marginRamp + (targetMargin * 0.3) * (1 - marginRamp);
+    const impliedFcf = revenue * margin;
+    pvSum += impliedFcf / Math.pow(1 + wacc, year);
+  }
+
+  // Terminal: revenue at terminal growth, full target margin
+  const terminalRevenue = revenue * (1 + terminalGrowth);
+  const terminalFcf = terminalRevenue * targetMargin;
+  const terminalValue = terminalFcf / (wacc - terminalGrowth);
+  const pvTerminal = terminalValue / Math.pow(1 + wacc, projectionYears);
+
+  const enterpriseValue = pvSum + pvTerminal;
+  const equityValue = enterpriseValue - netDebt;
+  return equityValue > 0 ? equityValue / shares : 0;
 }
 
 /**
@@ -340,7 +424,8 @@ function computeRelativePerShare(
   // richly-priced average company that happens to be in the same sector.
   const roe = raw(financialData, 'returnOnEquity') ?? 0;
   const netMargin = raw(financialData, 'profitMargins') ?? 0;
-  const q = qualityFactor(roe, netMargin);
+  const revenueGrowth = raw(financialData, 'revenueGrowth') ?? 0;
+  const q = qualityFactor(roe, netMargin) * growthPremium(revenueGrowth);
 
   const pe = m.pe * q;
   const ps = m.ps * q;
@@ -352,8 +437,10 @@ function computeRelativePerShare(
   // can wildly overstate value for richly-priced or asset-heavy companies.
   const weighted: { method: string; fairValue: number; weight: number }[] = [];
 
-  // P/E -> fair price = sectorPE * EPS
-  const eps = raw(keyStats, 'trailingEps') ?? raw(keyStats, 'forwardEps');
+  // P/E -> fair price = sectorPE * EPS (prefer forward EPS for growth names)
+  const forwardEps = raw(keyStats, 'forwardEps');
+  const trailingEps = raw(keyStats, 'trailingEps');
+  const eps = (forwardEps != null && forwardEps > 0) ? forwardEps : trailingEps;
   if (eps != null && eps > 0) {
     weighted.push({ method: 'P/E', fairValue: pe * eps, weight: 2.0 });
   }
@@ -414,6 +501,22 @@ function qualityFactor(roe: number, netMargin: number): number {
   else if (netMargin <= 0) f -= 0.2;
 
   return Math.max(0.6, Math.min(1.5, f));
+}
+
+/**
+ * Growth premium multiplier for relative valuation. High-growth companies in
+ * low-multiple sectors (e.g. Adani Green in Utilities, or a hyper-growth SaaS
+ * in Technology) genuinely deserve richer multiples than the sector average,
+ * because the market prices in future earnings, not just current ones.
+ * Ranges 1.0 (low growth) to 2.5 (>50% growth).
+ */
+function growthPremium(revenueGrowth: number): number {
+  if (revenueGrowth >= 0.5) return 2.5;
+  if (revenueGrowth >= 0.35) return 2.0;
+  if (revenueGrowth >= 0.25) return 1.6;
+  if (revenueGrowth >= 0.15) return 1.3;
+  if (revenueGrowth >= 0.08) return 1.1;
+  return 1.0;
 }
 
 /**
@@ -668,6 +771,29 @@ export function calculateValuation(
       dcfMethod = 'Earnings';
       dcfBaseCashFlow = baseEarnings;
       effectiveDiscountRate = earningsDiscount;
+    }
+  }
+
+  // Revenue-based DCF fallback for high-growth companies with low/negative
+  // current earnings or FCF (e.g. Adani Green, early-stage tech). Projects
+  // revenue at the growth rate and applies a target mature margin.
+  if (dcfValuePerShare <= 0 || (dcfValuePerShare > 0 && dcfValuePerShare < currentPrice * 0.3)) {
+    const totalRevenue = raw(financialData, 'totalRevenue') ?? 0;
+    const currentMargin = raw(financialData, 'profitMargins') ?? 0;
+    if (totalRevenue > 0 && shares > 0) {
+      // Target mature net margin: use the higher of current margin or a sector-appropriate floor
+      const matureMarginFloor = sector === 'Utilities' ? 0.12 : sector === 'Energy' ? 0.10 : 0.10;
+      const targetMargin = Math.max(currentMargin, matureMarginFloor);
+      // Apply revenue growth and compute implied future earnings → DCF
+      const revenueDcf = computeRevenueDcfPerShare(
+        totalRevenue, initialGrowth, terminalGrowth, targetMargin, fcfDiscount, netDebt, shares, projectionYears,
+      );
+      if (revenueDcf > dcfValuePerShare) {
+        dcfValuePerShare = revenueDcf;
+        dcfMethod = 'FCF'; // label as cash-flow based (from projected earnings)
+        dcfBaseCashFlow = totalRevenue;
+        effectiveDiscountRate = fcfDiscount;
+      }
     }
   }
 

@@ -11,10 +11,13 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
     private configService: ConfigService,
     private authService: AuthService,
   ) {
+    // Use placeholder values if env vars are not set — the strategy will
+    // instantiate without crashing. The /auth/github route simply won't work
+    // until real credentials are configured.
     super({
-      clientID: configService.get<string>('GITHUB_CLIENT_ID'),
-      clientSecret: configService.get<string>('GITHUB_CLIENT_SECRET'),
-      callbackURL: configService.get<string>('GITHUB_CALLBACK_URL'),
+      clientID: configService.get<string>('GITHUB_CLIENT_ID') || 'not-configured',
+      clientSecret: configService.get<string>('GITHUB_CLIENT_SECRET') || 'not-configured',
+      callbackURL: configService.get<string>('GITHUB_CALLBACK_URL') || 'http://localhost:4000/api/auth/github/callback',
       scope: ['user:email'],
     });
   }

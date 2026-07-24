@@ -12,9 +12,9 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     private authService: AuthService,
   ) {
     super({
-      clientID: configService.get<string>('GOOGLE_CLIENT_ID'),
-      clientSecret: configService.get<string>('GOOGLE_CLIENT_SECRET'),
-      callbackURL: configService.get<string>('GOOGLE_CALLBACK_URL'),
+      clientID: configService.get<string>('GOOGLE_CLIENT_ID') || 'not-configured',
+      clientSecret: configService.get<string>('GOOGLE_CLIENT_SECRET') || 'not-configured',
+      callbackURL: configService.get<string>('GOOGLE_CALLBACK_URL') || 'http://localhost:4000/api/auth/google/callback',
       scope: ['openid', 'email', 'profile'],
       userProfileURL: 'https://www.googleapis.com/oauth2/v3/userinfo',
     });
@@ -58,12 +58,15 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     };
 
     try {
+      console.log('[GoogleStrategy] validate() for email:', email);
       const tokens = await this.authService.validateOAuthLogin(
         user,
         AuthProvider.GOOGLE,
       );
+      console.log('[GoogleStrategy] validateOAuthLogin success, tokens generated:', !!tokens?.accessToken);
       done(null, tokens);
-    } catch (error) {
+    } catch (error: any) {
+      console.error('[GoogleStrategy] validateOAuthLogin FAILED:', error?.message, error?.stack);
       done(error, false);
     }
   }
